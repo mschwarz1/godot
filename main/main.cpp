@@ -3328,6 +3328,8 @@ void Main::cleanup(bool p_force) {
 	ResourceLoader::clear_translation_remaps();
 	ResourceLoader::clear_path_remaps();
 
+	ResourceLoader::clear_thread_load_tasks();
+
 	ScriptServer::finish_languages();
 
 	// Sync pending commands that may have been queued from a different thread during ScriptServer finalization
@@ -3361,6 +3363,7 @@ void Main::cleanup(bool p_force) {
 	finalize_theme_db();
 
 	// Before deinitializing server extensions, finalize servers which may be loaded as extensions.
+	finalize_navigation_server();
 	finalize_physics();
 
 	NativeExtensionManager::get_singleton()->deinitialize_extensions(NativeExtension::INITIALIZATION_LEVEL_SERVERS);
@@ -3384,7 +3387,6 @@ void Main::cleanup(bool p_force) {
 
 	OS::get_singleton()->finalize();
 
-	finalize_navigation_server();
 	finalize_display();
 
 	if (input) {

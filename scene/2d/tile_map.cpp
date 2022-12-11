@@ -995,9 +995,11 @@ void TileMap::_recompute_rect_cache() {
 		}
 	}
 
+	bool changed = rect_cache != r_total;
+
 	rect_cache = r_total;
 
-	item_rect_changed();
+	item_rect_changed(changed);
 
 	rect_cache_dirty = false;
 #endif
@@ -1733,6 +1735,7 @@ void TileMap::_navigation_update_dirty_quadrants(SelfList<TileMapQuadrant>::List
 							tile_transform.set_origin(map_to_local(E_cell));
 
 							RID region = NavigationServer2D::get_singleton()->region_create();
+							NavigationServer2D::get_singleton()->region_set_owner_id(region, get_instance_id());
 							NavigationServer2D::get_singleton()->region_set_map(region, get_world_2d()->get_navigation_map());
 							NavigationServer2D::get_singleton()->region_set_transform(region, tilemap_xform * tile_transform);
 							NavigationServer2D::get_singleton()->region_set_navpoly(region, navpoly);
