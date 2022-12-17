@@ -1,4 +1,6 @@
-scons module_mono_enabled=yes float=64 -j8
-bin/godot.windows.editor.double.x86_64.mono.exe --generate-mono-glue modules/mono/glue --float=64
-python ./modules/mono/build_scripts/build_assemblies.py --godot-output-dir ./bin --push-nupkgs-local "G:\GodotSource\GodotNugetSourceData" --float=64
+set -e
+
+scons module_mono_enabled=yes precision=double -j8
+bin/godot.windows.editor.double.x86_64.mono.exe --generate-mono-glue modules/mono/glue --precision=double
+python ./modules/mono/build_scripts/build_assemblies.py --godot-output-dir ./bin --push-nupkgs-local "G:\GodotSource\GodotNugetSourceData" --precision=double
 
