@@ -164,6 +164,7 @@ Files extracted from upstream source:
 
 - `src/` folder, minus the `dlg` and `tools` subfolders
   * These files can be removed: `.dat`, `.diff`, `.mk`, `.rc`, `README*`
+  * In `src/gzip/`, remove zlib files (everything but `ftgzip.c` and `ftzconf.h`)
 - `include/` folder, minus the `dlg` subfolder
 - `LICENSE.TXT` and `docs/FTL.TXT`
 
@@ -217,8 +218,8 @@ Files extracted from upstream source:
 ## graphite
 
 - Upstream: https://github.com/silnrsi/graphite
-- Version: 1.3.14 (80c52493ef42e6fe605a69dcddd2a691cd8a1380, 2021)
-- License: MPL-2.0
+- Version: 1.3.14 (27572742003b93dc53dc02c01c237b72c6c25f54, 2022)
+- License: MIT
 
 Files extracted from upstream source:
 
@@ -230,7 +231,7 @@ Files extracted from upstream source:
 ## harfbuzz
 
 - Upstream: https://github.com/harfbuzz/harfbuzz
-- Version: 5.3.1 (970321db7bddbe8c579b73751fc655a924ea3ce6, 2022)
+- Version: 6.0.0 (afcae83a064843d71d47624bc162e121cc56c08b, 2022)
 - License: MIT
 
 Files extracted from upstream source:
@@ -345,7 +346,7 @@ Files extracted from upstream source:
 ## mbedtls
 
 - Upstream: https://github.com/Mbed-TLS/mbedtls
-- Version: 2.18.1 (dd79db10014d85b26d11fe57218431f2e5ede6f2, 2022)
+- Version: 2.18.2 (89f040a5c938985c5f30728baed21e49d0846a53, 2022)
 - License: Apache 2.0
 
 File extracted from upstream release tarball:
@@ -355,11 +356,9 @@ File extracted from upstream release tarball:
 - The `LICENSE` file.
 - Applied the patch in `patches/1453.diff` (upstream PR:
   https://github.com/ARMmbed/mbedtls/pull/1453).
+  Applied the patch in `patches/windows-arm64-hardclock.diff`
 - Added 2 files `godot_core_mbedtls_platform.c` and `godot_core_mbedtls_config.h`
   providing configuration for light bundling with core.
-
-Some changes have been made in order to fix Windows on ARM build errors.
-They are marked with `// -- GODOT start --` and `// -- GODOT end --`
 
 
 ## meshoptimizer
@@ -416,12 +415,14 @@ that file when upgrading.
 ## minizip
 
 - Upstream: https://www.zlib.net
-- Version: 1.2.12 (zlib contrib, 2022)
+- Version: 1.2.13 (zlib contrib, 2022)
 - License: zlib
 
 Files extracted from the upstream source:
 
-- contrib/minizip/{crypt.h,ioapi.{c,h},unzip.{c,h},zip.{c,h}}
+- From `contrib/minizip`:
+  `{crypt.h,ioapi.{c,h},unzip.{c,h},zip.{c,h}}`
+  `MiniZip64_info.txt`
 
 Important: Some files have Godot-made changes for use in core/io.
 They are marked with `/* GODOT start */` and `/* GODOT end */`
@@ -548,7 +549,7 @@ Patch files are provided in `oidn/patches/`.
 ## openxr
 
 - Upstream: https://github.com/KhronosGroup/OpenXR-SDK
-- Version: 1.0.25 (c16a18c99740ea5dd251e3af117e0e5aea4ceaa9, 2022)
+- Version: 1.0.26 (e2da9ce83a4388c9622da328bf48548471261290, 2022)
 - License: Apache 2.0
 
 Files extracted from upstream source:
@@ -768,12 +769,13 @@ Files extracted from upstream source:
 ## zlib
 
 - Upstream: https://www.zlib.net
-- Version: 1.2.12 (2022)
+- Version: 1.2.13 (2022)
 - License: zlib
 
 Files extracted from upstream source:
 
-- all .c and .h files
+- All `*.c` and `*.h` files
+- `LICENSE`
 
 
 ## zstd

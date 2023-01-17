@@ -1,32 +1,32 @@
-/*************************************************************************/
-/*  rasterizer_canvas_gles3.h                                            */
-/*************************************************************************/
-/*                       This file is part of:                           */
-/*                           GODOT ENGINE                                */
-/*                      https://godotengine.org                          */
-/*************************************************************************/
-/* Copyright (c) 2007-2022 Juan Linietsky, Ariel Manzur.                 */
-/* Copyright (c) 2014-2022 Godot Engine contributors (cf. AUTHORS.md).   */
-/*                                                                       */
-/* Permission is hereby granted, free of charge, to any person obtaining */
-/* a copy of this software and associated documentation files (the       */
-/* "Software"), to deal in the Software without restriction, including   */
-/* without limitation the rights to use, copy, modify, merge, publish,   */
-/* distribute, sublicense, and/or sell copies of the Software, and to    */
-/* permit persons to whom the Software is furnished to do so, subject to */
-/* the following conditions:                                             */
-/*                                                                       */
-/* The above copyright notice and this permission notice shall be        */
-/* included in all copies or substantial portions of the Software.       */
-/*                                                                       */
-/* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,       */
-/* EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF    */
-/* MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.*/
-/* IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY  */
-/* CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,  */
-/* TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE     */
-/* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                */
-/*************************************************************************/
+/**************************************************************************/
+/*  rasterizer_canvas_gles3.h                                             */
+/**************************************************************************/
+/*                         This file is part of:                          */
+/*                             GODOT ENGINE                               */
+/*                        https://godotengine.org                         */
+/**************************************************************************/
+/* Copyright (c) 2014-present Godot Engine contributors (see AUTHORS.md). */
+/* Copyright (c) 2007-2014 Juan Linietsky, Ariel Manzur.                  */
+/*                                                                        */
+/* Permission is hereby granted, free of charge, to any person obtaining  */
+/* a copy of this software and associated documentation files (the        */
+/* "Software"), to deal in the Software without restriction, including    */
+/* without limitation the rights to use, copy, modify, merge, publish,    */
+/* distribute, sublicense, and/or sell copies of the Software, and to     */
+/* permit persons to whom the Software is furnished to do so, subject to  */
+/* the following conditions:                                              */
+/*                                                                        */
+/* The above copyright notice and this permission notice shall be         */
+/* included in all copies or substantial portions of the Software.        */
+/*                                                                        */
+/* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,        */
+/* EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF     */
+/* MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. */
+/* IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY   */
+/* CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,   */
+/* TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE      */
+/* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
+/**************************************************************************/
 
 #ifndef RASTERIZER_CANVAS_GLES3_H
 #define RASTERIZER_CANVAS_GLES3_H
@@ -75,6 +75,9 @@ class RasterizerCanvasGLES3 : public RendererCanvasRender {
 
 		FLAGS_USE_MSDF = (1 << 28),
 		FLAGS_USE_LCD = (1 << 29),
+
+		FLAGS_FLIP_H = (1 << 30),
+		FLAGS_FLIP_V = (1 << 31),
 	};
 
 	enum {
@@ -245,7 +248,7 @@ public:
 		uint32_t max_lights_per_render = 256;
 		uint32_t max_lights_per_item = 16;
 		uint32_t max_instances_per_batch = 512;
-		uint32_t max_instances_per_ubo = 16384;
+		uint32_t max_instances_per_buffer = 16384;
 		uint32_t max_instance_buffer_size = 16384 * 128;
 	} data;
 
@@ -278,7 +281,7 @@ public:
 	// We track them and ensure that they don't get reused until at least 2 frames have passed
 	// to avoid the GPU stalling to wait for a resource to become available.
 	struct DataBuffer {
-		GLuint ubo = 0;
+		GLuint buffer = 0;
 		GLuint light_ubo = 0;
 		GLuint state_ubo = 0;
 		uint64_t last_frame_used = -3;
@@ -359,6 +362,7 @@ public:
 	void _add_to_batch(uint32_t &r_index, bool &r_batch_broken);
 	void _allocate_instance_data_buffer();
 	void _align_instance_data_buffer(uint32_t &r_index);
+	void _enable_attributes(uint32_t p_start, bool p_primitive, uint32_t p_rate = 1);
 
 	void set_time(double p_time);
 

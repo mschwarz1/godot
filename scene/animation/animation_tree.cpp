@@ -1,32 +1,32 @@
-/*************************************************************************/
-/*  animation_tree.cpp                                                   */
-/*************************************************************************/
-/*                       This file is part of:                           */
-/*                           GODOT ENGINE                                */
-/*                      https://godotengine.org                          */
-/*************************************************************************/
-/* Copyright (c) 2007-2022 Juan Linietsky, Ariel Manzur.                 */
-/* Copyright (c) 2014-2022 Godot Engine contributors (cf. AUTHORS.md).   */
-/*                                                                       */
-/* Permission is hereby granted, free of charge, to any person obtaining */
-/* a copy of this software and associated documentation files (the       */
-/* "Software"), to deal in the Software without restriction, including   */
-/* without limitation the rights to use, copy, modify, merge, publish,   */
-/* distribute, sublicense, and/or sell copies of the Software, and to    */
-/* permit persons to whom the Software is furnished to do so, subject to */
-/* the following conditions:                                             */
-/*                                                                       */
-/* The above copyright notice and this permission notice shall be        */
-/* included in all copies or substantial portions of the Software.       */
-/*                                                                       */
-/* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,       */
-/* EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF    */
-/* MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.*/
-/* IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY  */
-/* CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,  */
-/* TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE     */
-/* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                */
-/*************************************************************************/
+/**************************************************************************/
+/*  animation_tree.cpp                                                    */
+/**************************************************************************/
+/*                         This file is part of:                          */
+/*                             GODOT ENGINE                               */
+/*                        https://godotengine.org                         */
+/**************************************************************************/
+/* Copyright (c) 2014-present Godot Engine contributors (see AUTHORS.md). */
+/* Copyright (c) 2007-2014 Juan Linietsky, Ariel Manzur.                  */
+/*                                                                        */
+/* Permission is hereby granted, free of charge, to any person obtaining  */
+/* a copy of this software and associated documentation files (the        */
+/* "Software"), to deal in the Software without restriction, including    */
+/* without limitation the rights to use, copy, modify, merge, publish,    */
+/* distribute, sublicense, and/or sell copies of the Software, and to     */
+/* permit persons to whom the Software is furnished to do so, subject to  */
+/* the following conditions:                                              */
+/*                                                                        */
+/* The above copyright notice and this permission notice shall be         */
+/* included in all copies or substantial portions of the Software.        */
+/*                                                                        */
+/* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,        */
+/* EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF     */
+/* MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. */
+/* IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY   */
+/* CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,   */
+/* TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE      */
+/* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
+/**************************************************************************/
 
 #include "animation_tree.h"
 
@@ -430,8 +430,6 @@ void AnimationNode::_bind_methods() {
 	GDVIRTUAL_BIND(_process, "time", "seek", "is_external_seeking");
 	GDVIRTUAL_BIND(_get_caption);
 	GDVIRTUAL_BIND(_has_filter);
-
-	ADD_SIGNAL(MethodInfo("removed_from_graph"));
 
 	ADD_SIGNAL(MethodInfo("tree_changed"));
 
@@ -1383,7 +1381,7 @@ void AnimationTree::_process_graph(double p_delta) {
 							}
 						} else {
 							if (seeked) {
-								int idx = a->track_find_key(i, time, !is_external_seeking);
+								int idx = a->track_find_key(i, time, is_external_seeking ? Animation::FIND_MODE_NEAREST : Animation::FIND_MODE_EXACT);
 								if (idx < 0) {
 									continue;
 								}
@@ -1406,7 +1404,7 @@ void AnimationTree::_process_graph(double p_delta) {
 						TrackCacheMethod *t = static_cast<TrackCacheMethod *>(track);
 
 						if (seeked) {
-							int idx = a->track_find_key(i, time, !is_external_seeking);
+							int idx = a->track_find_key(i, time, is_external_seeking ? Animation::FIND_MODE_NEAREST : Animation::FIND_MODE_EXACT);
 							if (idx < 0) {
 								continue;
 							}
@@ -1440,7 +1438,7 @@ void AnimationTree::_process_graph(double p_delta) {
 
 						if (seeked) {
 							//find whatever should be playing
-							int idx = a->track_find_key(i, time, !is_external_seeking);
+							int idx = a->track_find_key(i, time, is_external_seeking ? Animation::FIND_MODE_NEAREST : Animation::FIND_MODE_EXACT);
 							if (idx < 0) {
 								continue;
 							}
@@ -1553,7 +1551,7 @@ void AnimationTree::_process_graph(double p_delta) {
 
 						if (seeked) {
 							//seek
-							int idx = a->track_find_key(i, time, !is_external_seeking);
+							int idx = a->track_find_key(i, time, is_external_seeking ? Animation::FIND_MODE_NEAREST : Animation::FIND_MODE_EXACT);
 							if (idx < 0) {
 								continue;
 							}
@@ -1759,7 +1757,7 @@ void AnimationTree::_setup_animation_player() {
 
 	AnimationPlayer *new_player = nullptr;
 	if (!animation_player.is_empty()) {
-		new_player = Object::cast_to<AnimationPlayer>(get_node(animation_player));
+		new_player = Object::cast_to<AnimationPlayer>(get_node_or_null(animation_player));
 		if (new_player && !new_player->is_connected("animation_list_changed", callable_mp(this, &AnimationTree::_animation_player_changed))) {
 			new_player->connect("animation_list_changed", callable_mp(this, &AnimationTree::_animation_player_changed));
 		}
@@ -2037,6 +2035,10 @@ void AnimationTree::_bind_methods() {
 	BIND_ENUM_CONSTANT(ANIMATION_PROCESS_MANUAL);
 
 	ADD_SIGNAL(MethodInfo("animation_player_changed"));
+
+	// Signals from AnimationNodes.
+	ADD_SIGNAL(MethodInfo("animation_started", PropertyInfo(Variant::STRING_NAME, "anim_name")));
+	ADD_SIGNAL(MethodInfo("animation_finished", PropertyInfo(Variant::STRING_NAME, "anim_name")));
 }
 
 AnimationTree::AnimationTree() {

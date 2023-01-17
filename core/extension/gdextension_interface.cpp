@@ -1,32 +1,32 @@
-/*************************************************************************/
-/*  gdextension_interface.cpp                                            */
-/*************************************************************************/
-/*                       This file is part of:                           */
-/*                           GODOT ENGINE                                */
-/*                      https://godotengine.org                          */
-/*************************************************************************/
-/* Copyright (c) 2007-2022 Juan Linietsky, Ariel Manzur.                 */
-/* Copyright (c) 2014-2022 Godot Engine contributors (cf. AUTHORS.md).   */
-/*                                                                       */
-/* Permission is hereby granted, free of charge, to any person obtaining */
-/* a copy of this software and associated documentation files (the       */
-/* "Software"), to deal in the Software without restriction, including   */
-/* without limitation the rights to use, copy, modify, merge, publish,   */
-/* distribute, sublicense, and/or sell copies of the Software, and to    */
-/* permit persons to whom the Software is furnished to do so, subject to */
-/* the following conditions:                                             */
-/*                                                                       */
-/* The above copyright notice and this permission notice shall be        */
-/* included in all copies or substantial portions of the Software.       */
-/*                                                                       */
-/* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,       */
-/* EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF    */
-/* MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.*/
-/* IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY  */
-/* CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,  */
-/* TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE     */
-/* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                */
-/*************************************************************************/
+/**************************************************************************/
+/*  gdextension_interface.cpp                                             */
+/**************************************************************************/
+/*                         This file is part of:                          */
+/*                             GODOT ENGINE                               */
+/*                        https://godotengine.org                         */
+/**************************************************************************/
+/* Copyright (c) 2014-present Godot Engine contributors (see AUTHORS.md). */
+/* Copyright (c) 2007-2014 Juan Linietsky, Ariel Manzur.                  */
+/*                                                                        */
+/* Permission is hereby granted, free of charge, to any person obtaining  */
+/* a copy of this software and associated documentation files (the        */
+/* "Software"), to deal in the Software without restriction, including    */
+/* without limitation the rights to use, copy, modify, merge, publish,    */
+/* distribute, sublicense, and/or sell copies of the Software, and to     */
+/* permit persons to whom the Software is furnished to do so, subject to  */
+/* the following conditions:                                              */
+/*                                                                        */
+/* The above copyright notice and this permission notice shall be         */
+/* included in all copies or substantial portions of the Software.        */
+/*                                                                        */
+/* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,        */
+/* EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF     */
+/* MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. */
+/* IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY   */
+/* CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,   */
+/* TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE      */
+/* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
+/**************************************************************************/
 
 #include "gdextension_interface.h"
 
@@ -80,7 +80,7 @@ static void gdextension_variant_destroy(GDExtensionVariantPtr p_self) {
 
 // variant type
 
-static void gdextension_variant_call(GDExtensionVariantPtr p_self, GDExtensionConstStringNamePtr p_method, GDExtensionConstVariantPtr *p_args, GDExtensionInt p_argcount, GDExtensionVariantPtr r_return, GDExtensionCallError *r_error) {
+static void gdextension_variant_call(GDExtensionVariantPtr p_self, GDExtensionConstStringNamePtr p_method, const GDExtensionConstVariantPtr *p_args, GDExtensionInt p_argcount, GDExtensionVariantPtr r_return, GDExtensionCallError *r_error) {
 	Variant *self = (Variant *)p_self;
 	const StringName method = *reinterpret_cast<const StringName *>(p_method);
 	const Variant **args = (const Variant **)p_args;
@@ -96,7 +96,7 @@ static void gdextension_variant_call(GDExtensionVariantPtr p_self, GDExtensionCo
 	}
 }
 
-static void gdextension_variant_call_static(GDExtensionVariantType p_type, GDExtensionConstStringNamePtr p_method, GDExtensionConstVariantPtr *p_args, GDExtensionInt p_argcount, GDExtensionVariantPtr r_return, GDExtensionCallError *r_error) {
+static void gdextension_variant_call_static(GDExtensionVariantType p_type, GDExtensionConstStringNamePtr p_method, const GDExtensionConstVariantPtr *p_args, GDExtensionInt p_argcount, GDExtensionVariantPtr r_return, GDExtensionCallError *r_error) {
 	Variant::Type type = (Variant::Type)p_type;
 	const StringName method = *reinterpret_cast<const StringName *>(p_method);
 	const Variant **args = (const Variant **)p_args;
@@ -486,7 +486,7 @@ static GDExtensionPtrConstructor gdextension_variant_get_ptr_constructor(GDExten
 static GDExtensionPtrDestructor gdextension_variant_get_ptr_destructor(GDExtensionVariantType p_type) {
 	return (GDExtensionPtrDestructor)Variant::get_ptr_destructor(Variant::Type(p_type));
 }
-static void gdextension_variant_construct(GDExtensionVariantType p_type, GDExtensionVariantPtr p_base, GDExtensionConstVariantPtr *p_args, int32_t p_argument_count, GDExtensionCallError *r_error) {
+static void gdextension_variant_construct(GDExtensionVariantType p_type, GDExtensionVariantPtr p_base, const GDExtensionConstVariantPtr *p_args, int32_t p_argument_count, GDExtensionCallError *r_error) {
 	memnew_placement(p_base, Variant);
 
 	Callable::CallError error;
@@ -814,7 +814,7 @@ static GDExtensionVariantPtr gdextension_dictionary_operator_index_const(GDExten
 
 /* OBJECT API */
 
-static void gdextension_object_method_bind_call(GDExtensionMethodBindPtr p_method_bind, GDExtensionObjectPtr p_instance, GDExtensionConstVariantPtr *p_args, GDExtensionInt p_arg_count, GDExtensionVariantPtr r_return, GDExtensionCallError *r_error) {
+static void gdextension_object_method_bind_call(GDExtensionMethodBindPtr p_method_bind, GDExtensionObjectPtr p_instance, const GDExtensionConstVariantPtr *p_args, GDExtensionInt p_arg_count, GDExtensionVariantPtr r_return, GDExtensionCallError *r_error) {
 	const MethodBind *mb = reinterpret_cast<const MethodBind *>(p_method_bind);
 	Object *o = (Object *)p_instance;
 	const Variant **args = (const Variant **)p_args;
@@ -830,7 +830,7 @@ static void gdextension_object_method_bind_call(GDExtensionMethodBindPtr p_metho
 	}
 }
 
-static void gdextension_object_method_bind_ptrcall(GDExtensionMethodBindPtr p_method_bind, GDExtensionObjectPtr p_instance, GDExtensionConstTypePtr *p_args, GDExtensionTypePtr p_ret) {
+static void gdextension_object_method_bind_ptrcall(GDExtensionMethodBindPtr p_method_bind, GDExtensionObjectPtr p_instance, const GDExtensionConstTypePtr *p_args, GDExtensionTypePtr p_ret) {
 	const MethodBind *mb = reinterpret_cast<const MethodBind *>(p_method_bind);
 	Object *o = (Object *)p_instance;
 	mb->ptrcall(o, (const void **)p_args, p_ret);
@@ -877,6 +877,23 @@ static GDExtensionObjectPtr gdextension_object_cast_to(GDExtensionConstObjectPtr
 static GDObjectInstanceID gdextension_object_get_instance_id(GDExtensionConstObjectPtr p_object) {
 	const Object *o = (const Object *)p_object;
 	return (GDObjectInstanceID)o->get_instance_id();
+}
+
+static GDExtensionObjectPtr gdextension_ref_get_object(GDExtensionConstRefPtr p_ref) {
+	const Ref<RefCounted> *ref = (const Ref<RefCounted> *)p_ref;
+	if (ref == nullptr || ref->is_null()) {
+		return (GDExtensionObjectPtr) nullptr;
+	} else {
+		return (GDExtensionObjectPtr)ref->ptr();
+	}
+}
+
+static void gdextension_ref_set_object(GDExtensionRefPtr p_ref, GDExtensionObjectPtr p_object) {
+	Ref<RefCounted> *ref = (Ref<RefCounted> *)p_ref;
+	ERR_FAIL_NULL(ref);
+
+	Object *o = (RefCounted *)p_object;
+	ref->reference_ptr(o);
 }
 
 static GDExtensionScriptInstancePtr gdextension_script_instance_create(const GDExtensionScriptInstanceInfo *p_info, GDExtensionScriptInstanceDataPtr p_instance_data) {
@@ -1056,6 +1073,11 @@ void gdextension_setup_interface(GDExtensionInterface *p_interface) {
 	gde_interface.object_cast_to = gdextension_object_cast_to;
 	gde_interface.object_get_instance_from_id = gdextension_object_get_instance_from_id;
 	gde_interface.object_get_instance_id = gdextension_object_get_instance_id;
+
+	/* REFERENCE */
+
+	gde_interface.ref_get_object = gdextension_ref_get_object;
+	gde_interface.ref_set_object = gdextension_ref_set_object;
 
 	/* SCRIPT INSTANCE */
 

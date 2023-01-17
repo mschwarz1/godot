@@ -1,32 +1,32 @@
-/*************************************************************************/
-/*  gdscript_cache.cpp                                                   */
-/*************************************************************************/
-/*                       This file is part of:                           */
-/*                           GODOT ENGINE                                */
-/*                      https://godotengine.org                          */
-/*************************************************************************/
-/* Copyright (c) 2007-2022 Juan Linietsky, Ariel Manzur.                 */
-/* Copyright (c) 2014-2022 Godot Engine contributors (cf. AUTHORS.md).   */
-/*                                                                       */
-/* Permission is hereby granted, free of charge, to any person obtaining */
-/* a copy of this software and associated documentation files (the       */
-/* "Software"), to deal in the Software without restriction, including   */
-/* without limitation the rights to use, copy, modify, merge, publish,   */
-/* distribute, sublicense, and/or sell copies of the Software, and to    */
-/* permit persons to whom the Software is furnished to do so, subject to */
-/* the following conditions:                                             */
-/*                                                                       */
-/* The above copyright notice and this permission notice shall be        */
-/* included in all copies or substantial portions of the Software.       */
-/*                                                                       */
-/* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,       */
-/* EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF    */
-/* MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.*/
-/* IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY  */
-/* CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,  */
-/* TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE     */
-/* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                */
-/*************************************************************************/
+/**************************************************************************/
+/*  gdscript_cache.cpp                                                    */
+/**************************************************************************/
+/*                         This file is part of:                          */
+/*                             GODOT ENGINE                               */
+/*                        https://godotengine.org                         */
+/**************************************************************************/
+/* Copyright (c) 2014-present Godot Engine contributors (see AUTHORS.md). */
+/* Copyright (c) 2007-2014 Juan Linietsky, Ariel Manzur.                  */
+/*                                                                        */
+/* Permission is hereby granted, free of charge, to any person obtaining  */
+/* a copy of this software and associated documentation files (the        */
+/* "Software"), to deal in the Software without restriction, including    */
+/* without limitation the rights to use, copy, modify, merge, publish,    */
+/* distribute, sublicense, and/or sell copies of the Software, and to     */
+/* permit persons to whom the Software is furnished to do so, subject to  */
+/* the following conditions:                                              */
+/*                                                                        */
+/* The above copyright notice and this permission notice shall be         */
+/* included in all copies or substantial portions of the Software.        */
+/*                                                                        */
+/* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,        */
+/* EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF     */
+/* MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. */
+/* IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY   */
+/* CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,   */
+/* TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE      */
+/* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
+/**************************************************************************/
 
 #include "gdscript_cache.h"
 
@@ -50,6 +50,13 @@ GDScriptParser *GDScriptParserRef::get_parser() const {
 	return parser;
 }
 
+GDScriptAnalyzer *GDScriptParserRef::get_analyzer() {
+	if (analyzer == nullptr) {
+		analyzer = memnew(GDScriptAnalyzer(parser));
+	}
+	return analyzer;
+}
+
 Error GDScriptParserRef::raise_status(Status p_new_status) {
 	ERR_FAIL_COND_V(parser == nullptr, ERR_INVALID_DATA);
 
@@ -64,23 +71,22 @@ Error GDScriptParserRef::raise_status(Status p_new_status) {
 				result = parser->parse(GDScriptCache::get_source_code(path), path, false);
 				break;
 			case PARSED: {
-				analyzer = memnew(GDScriptAnalyzer(parser));
 				status = INHERITANCE_SOLVED;
-				Error inheritance_result = analyzer->resolve_inheritance();
+				Error inheritance_result = get_analyzer()->resolve_inheritance();
 				if (result == OK) {
 					result = inheritance_result;
 				}
 			} break;
 			case INHERITANCE_SOLVED: {
 				status = INTERFACE_SOLVED;
-				Error interface_result = analyzer->resolve_interface();
+				Error interface_result = get_analyzer()->resolve_interface();
 				if (result == OK) {
 					result = interface_result;
 				}
 			} break;
 			case INTERFACE_SOLVED: {
 				status = FULLY_SOLVED;
-				Error body_result = analyzer->resolve_body();
+				Error body_result = get_analyzer()->resolve_body();
 				if (result == OK) {
 					result = body_result;
 				}
@@ -292,13 +298,7 @@ Ref<GDScript> GDScriptCache::get_full_script(const String &p_path, Error &r_erro
 	singleton->full_gdscript_cache[p_path] = script;
 	singleton->shallow_gdscript_cache.erase(p_path);
 
-	r_error = script->reload(true);
-	if (r_error) {
-		singleton->shallow_gdscript_cache[p_path] = script;
-		singleton->full_gdscript_cache.erase(p_path);
-		return script;
-	}
-
+	script->reload(true);
 	return script;
 }
 

@@ -1,32 +1,32 @@
-/*************************************************************************/
-/*  primitive_meshes.cpp                                                 */
-/*************************************************************************/
-/*                       This file is part of:                           */
-/*                           GODOT ENGINE                                */
-/*                      https://godotengine.org                          */
-/*************************************************************************/
-/* Copyright (c) 2007-2022 Juan Linietsky, Ariel Manzur.                 */
-/* Copyright (c) 2014-2022 Godot Engine contributors (cf. AUTHORS.md).   */
-/*                                                                       */
-/* Permission is hereby granted, free of charge, to any person obtaining */
-/* a copy of this software and associated documentation files (the       */
-/* "Software"), to deal in the Software without restriction, including   */
-/* without limitation the rights to use, copy, modify, merge, publish,   */
-/* distribute, sublicense, and/or sell copies of the Software, and to    */
-/* permit persons to whom the Software is furnished to do so, subject to */
-/* the following conditions:                                             */
-/*                                                                       */
-/* The above copyright notice and this permission notice shall be        */
-/* included in all copies or substantial portions of the Software.       */
-/*                                                                       */
-/* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,       */
-/* EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF    */
-/* MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.*/
-/* IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY  */
-/* CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,  */
-/* TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE     */
-/* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                */
-/*************************************************************************/
+/**************************************************************************/
+/*  primitive_meshes.cpp                                                  */
+/**************************************************************************/
+/*                         This file is part of:                          */
+/*                             GODOT ENGINE                               */
+/*                        https://godotengine.org                         */
+/**************************************************************************/
+/* Copyright (c) 2014-present Godot Engine contributors (see AUTHORS.md). */
+/* Copyright (c) 2007-2014 Juan Linietsky, Ariel Manzur.                  */
+/*                                                                        */
+/* Permission is hereby granted, free of charge, to any person obtaining  */
+/* a copy of this software and associated documentation files (the        */
+/* "Software"), to deal in the Software without restriction, including    */
+/* without limitation the rights to use, copy, modify, merge, publish,    */
+/* distribute, sublicense, and/or sell copies of the Software, and to     */
+/* permit persons to whom the Software is furnished to do so, subject to  */
+/* the following conditions:                                              */
+/*                                                                        */
+/* The above copyright notice and this permission notice shall be         */
+/* included in all copies or substantial portions of the Software.        */
+/*                                                                        */
+/* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,        */
+/* EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF     */
+/* MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. */
+/* IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY   */
+/* CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,   */
+/* TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE      */
+/* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
+/**************************************************************************/
 
 #include "primitive_meshes.h"
 
@@ -180,7 +180,7 @@ TypedArray<Array> PrimitiveMesh::surface_get_blend_shape_arrays(int p_surface) c
 	return TypedArray<Array>(); //not really supported
 }
 
-uint32_t PrimitiveMesh::surface_get_format(int p_idx) const {
+BitField<Mesh::ArrayFormat> PrimitiveMesh::surface_get_format(int p_idx) const {
 	ERR_FAIL_INDEX_V(p_idx, 1, 0);
 
 	uint32_t mesh_format = RS::ARRAY_FORMAT_VERTEX | RS::ARRAY_FORMAT_NORMAL | RS::ARRAY_FORMAT_TANGENT | RS::ARRAY_FORMAT_TEX_UV | RS::ARRAY_FORMAT_INDEX;
@@ -340,6 +340,7 @@ PrimitiveMesh::PrimitiveMesh() {
 }
 
 PrimitiveMesh::~PrimitiveMesh() {
+	ERR_FAIL_NULL(RenderingServer::get_singleton());
 	RenderingServer::get_singleton()->free(mesh);
 }
 
@@ -2171,6 +2172,24 @@ int TubeTrailMesh::get_section_rings() const {
 	return section_rings;
 }
 
+void TubeTrailMesh::set_cap_top(bool p_cap_top) {
+	cap_top = p_cap_top;
+	_request_update();
+}
+
+bool TubeTrailMesh::is_cap_top() const {
+	return cap_top;
+}
+
+void TubeTrailMesh::set_cap_bottom(bool p_cap_bottom) {
+	cap_bottom = p_cap_bottom;
+	_request_update();
+}
+
+bool TubeTrailMesh::is_cap_bottom() const {
+	return cap_bottom;
+}
+
 void TubeTrailMesh::set_curve(const Ref<Curve> &p_curve) {
 	if (curve == p_curve) {
 		return;
@@ -2284,49 +2303,21 @@ void TubeTrailMesh::_create_mesh_array(Array &p_arr) const {
 		thisrow = point;
 	}
 
-	// add top
-	float scale_pos = 1.0;
-	if (curve.is_valid() && curve->get_point_count() > 0) {
-		scale_pos = curve->sample_baked(0);
-	}
+	if (cap_top) {
+		// add top
+		float scale_pos = 1.0;
+		if (curve.is_valid() && curve->get_point_count() > 0) {
+			scale_pos = curve->sample_baked(0);
+		}
 
-	if (scale_pos > CMP_EPSILON) {
-		float y = depth * 0.5;
+		if (scale_pos > CMP_EPSILON) {
+			float y = depth * 0.5;
 
-		thisrow = point;
-		points.push_back(Vector3(0.0, y, 0));
-		normals.push_back(Vector3(0.0, 1.0, 0.0));
-		ADD_TANGENT(1.0, 0.0, 0.0, 1.0)
-		uvs.push_back(Vector2(0.25, 0.75));
-		point++;
-
-		bone_indices.push_back(0);
-		bone_indices.push_back(0);
-		bone_indices.push_back(0);
-		bone_indices.push_back(0);
-
-		bone_weights.push_back(1.0);
-		bone_weights.push_back(0);
-		bone_weights.push_back(0);
-		bone_weights.push_back(0);
-
-		float rm = radius * scale_pos;
-
-		for (int i = 0; i <= radial_steps; i++) {
-			float r = i;
-			r /= radial_steps;
-
-			float x = sin(r * Math_TAU);
-			float z = cos(r * Math_TAU);
-
-			float u = ((x + 1.0) * 0.25);
-			float v = 0.5 + ((z + 1.0) * 0.25);
-
-			Vector3 p = Vector3(x * rm, y, z * rm);
-			points.push_back(p);
+			thisrow = point;
+			points.push_back(Vector3(0.0, y, 0));
 			normals.push_back(Vector3(0.0, 1.0, 0.0));
 			ADD_TANGENT(1.0, 0.0, 0.0, 1.0)
-			uvs.push_back(Vector2(u, v));
+			uvs.push_back(Vector2(0.25, 0.75));
 			point++;
 
 			bone_indices.push_back(0);
@@ -2339,57 +2330,59 @@ void TubeTrailMesh::_create_mesh_array(Array &p_arr) const {
 			bone_weights.push_back(0);
 			bone_weights.push_back(0);
 
-			if (i > 0) {
-				indices.push_back(thisrow);
-				indices.push_back(point - 1);
-				indices.push_back(point - 2);
+			float rm = radius * scale_pos;
+
+			for (int i = 0; i <= radial_steps; i++) {
+				float r = i;
+				r /= radial_steps;
+
+				float x = sin(r * Math_TAU);
+				float z = cos(r * Math_TAU);
+
+				float u = ((x + 1.0) * 0.25);
+				float v = 0.5 + ((z + 1.0) * 0.25);
+
+				Vector3 p = Vector3(x * rm, y, z * rm);
+				points.push_back(p);
+				normals.push_back(Vector3(0.0, 1.0, 0.0));
+				ADD_TANGENT(1.0, 0.0, 0.0, 1.0)
+				uvs.push_back(Vector2(u, v));
+				point++;
+
+				bone_indices.push_back(0);
+				bone_indices.push_back(0);
+				bone_indices.push_back(0);
+				bone_indices.push_back(0);
+
+				bone_weights.push_back(1.0);
+				bone_weights.push_back(0);
+				bone_weights.push_back(0);
+				bone_weights.push_back(0);
+
+				if (i > 0) {
+					indices.push_back(thisrow);
+					indices.push_back(point - 1);
+					indices.push_back(point - 2);
+				}
 			}
 		}
 	}
 
-	float scale_neg = 1.0;
-	if (curve.is_valid() && curve->get_point_count() > 0) {
-		scale_neg = curve->sample_baked(1.0);
-	}
+	if (cap_bottom) {
+		float scale_neg = 1.0;
+		if (curve.is_valid() && curve->get_point_count() > 0) {
+			scale_neg = curve->sample_baked(1.0);
+		}
 
-	// add bottom
-	if (scale_neg > CMP_EPSILON) {
-		float y = depth * -0.5;
+		if (scale_neg > CMP_EPSILON) {
+			// add bottom
+			float y = depth * -0.5;
 
-		thisrow = point;
-		points.push_back(Vector3(0.0, y, 0.0));
-		normals.push_back(Vector3(0.0, -1.0, 0.0));
-		ADD_TANGENT(1.0, 0.0, 0.0, 1.0)
-		uvs.push_back(Vector2(0.75, 0.75));
-		point++;
-
-		bone_indices.push_back(sections);
-		bone_indices.push_back(0);
-		bone_indices.push_back(0);
-		bone_indices.push_back(0);
-
-		bone_weights.push_back(1.0);
-		bone_weights.push_back(0);
-		bone_weights.push_back(0);
-		bone_weights.push_back(0);
-
-		float rm = radius * scale_neg;
-
-		for (int i = 0; i <= radial_steps; i++) {
-			float r = i;
-			r /= radial_steps;
-
-			float x = sin(r * Math_TAU);
-			float z = cos(r * Math_TAU);
-
-			float u = 0.5 + ((x + 1.0) * 0.25);
-			float v = 1.0 - ((z + 1.0) * 0.25);
-
-			Vector3 p = Vector3(x * rm, y, z * rm);
-			points.push_back(p);
+			thisrow = point;
+			points.push_back(Vector3(0.0, y, 0.0));
 			normals.push_back(Vector3(0.0, -1.0, 0.0));
 			ADD_TANGENT(1.0, 0.0, 0.0, 1.0)
-			uvs.push_back(Vector2(u, v));
+			uvs.push_back(Vector2(0.75, 0.75));
 			point++;
 
 			bone_indices.push_back(sections);
@@ -2402,10 +2395,40 @@ void TubeTrailMesh::_create_mesh_array(Array &p_arr) const {
 			bone_weights.push_back(0);
 			bone_weights.push_back(0);
 
-			if (i > 0) {
-				indices.push_back(thisrow);
-				indices.push_back(point - 2);
-				indices.push_back(point - 1);
+			float rm = radius * scale_neg;
+
+			for (int i = 0; i <= radial_steps; i++) {
+				float r = i;
+				r /= radial_steps;
+
+				float x = sin(r * Math_TAU);
+				float z = cos(r * Math_TAU);
+
+				float u = 0.5 + ((x + 1.0) * 0.25);
+				float v = 1.0 - ((z + 1.0) * 0.25);
+
+				Vector3 p = Vector3(x * rm, y, z * rm);
+				points.push_back(p);
+				normals.push_back(Vector3(0.0, -1.0, 0.0));
+				ADD_TANGENT(1.0, 0.0, 0.0, 1.0)
+				uvs.push_back(Vector2(u, v));
+				point++;
+
+				bone_indices.push_back(sections);
+				bone_indices.push_back(0);
+				bone_indices.push_back(0);
+				bone_indices.push_back(0);
+
+				bone_weights.push_back(1.0);
+				bone_weights.push_back(0);
+				bone_weights.push_back(0);
+				bone_weights.push_back(0);
+
+				if (i > 0) {
+					indices.push_back(thisrow);
+					indices.push_back(point - 2);
+					indices.push_back(point - 1);
+				}
 			}
 		}
 	}
@@ -2435,6 +2458,12 @@ void TubeTrailMesh::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("set_section_rings", "section_rings"), &TubeTrailMesh::set_section_rings);
 	ClassDB::bind_method(D_METHOD("get_section_rings"), &TubeTrailMesh::get_section_rings);
 
+	ClassDB::bind_method(D_METHOD("set_cap_top", "cap_top"), &TubeTrailMesh::set_cap_top);
+	ClassDB::bind_method(D_METHOD("is_cap_top"), &TubeTrailMesh::is_cap_top);
+
+	ClassDB::bind_method(D_METHOD("set_cap_bottom", "cap_bottom"), &TubeTrailMesh::set_cap_bottom);
+	ClassDB::bind_method(D_METHOD("is_cap_bottom"), &TubeTrailMesh::is_cap_bottom);
+
 	ClassDB::bind_method(D_METHOD("set_curve", "curve"), &TubeTrailMesh::set_curve);
 	ClassDB::bind_method(D_METHOD("get_curve"), &TubeTrailMesh::get_curve);
 
@@ -2447,13 +2476,16 @@ void TubeTrailMesh::_bind_methods() {
 
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "section_rings", PROPERTY_HINT_RANGE, "1,128,1"), "set_section_rings", "get_section_rings");
 
+	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "cap_top"), "set_cap_top", "is_cap_top");
+	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "cap_bottom"), "set_cap_bottom", "is_cap_bottom");
+
 	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "curve", PROPERTY_HINT_RESOURCE_TYPE, "Curve"), "set_curve", "get_curve");
 }
 
 TubeTrailMesh::TubeTrailMesh() {
 }
 
-// TUBE TRAIL
+// RIBBON TRAIL
 
 void RibbonTrailMesh::set_shape(Shape p_shape) {
 	shape = p_shape;

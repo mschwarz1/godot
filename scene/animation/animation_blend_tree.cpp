@@ -1,32 +1,32 @@
-/*************************************************************************/
-/*  animation_blend_tree.cpp                                             */
-/*************************************************************************/
-/*                       This file is part of:                           */
-/*                           GODOT ENGINE                                */
-/*                      https://godotengine.org                          */
-/*************************************************************************/
-/* Copyright (c) 2007-2022 Juan Linietsky, Ariel Manzur.                 */
-/* Copyright (c) 2014-2022 Godot Engine contributors (cf. AUTHORS.md).   */
-/*                                                                       */
-/* Permission is hereby granted, free of charge, to any person obtaining */
-/* a copy of this software and associated documentation files (the       */
-/* "Software"), to deal in the Software without restriction, including   */
-/* without limitation the rights to use, copy, modify, merge, publish,   */
-/* distribute, sublicense, and/or sell copies of the Software, and to    */
-/* permit persons to whom the Software is furnished to do so, subject to */
-/* the following conditions:                                             */
-/*                                                                       */
-/* The above copyright notice and this permission notice shall be        */
-/* included in all copies or substantial portions of the Software.       */
-/*                                                                       */
-/* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,       */
-/* EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF    */
-/* MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.*/
-/* IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY  */
-/* CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,  */
-/* TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE     */
-/* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                */
-/*************************************************************************/
+/**************************************************************************/
+/*  animation_blend_tree.cpp                                              */
+/**************************************************************************/
+/*                         This file is part of:                          */
+/*                             GODOT ENGINE                               */
+/*                        https://godotengine.org                         */
+/**************************************************************************/
+/* Copyright (c) 2014-present Godot Engine contributors (see AUTHORS.md). */
+/* Copyright (c) 2007-2014 Juan Linietsky, Ariel Manzur.                  */
+/*                                                                        */
+/* Permission is hereby granted, free of charge, to any person obtaining  */
+/* a copy of this software and associated documentation files (the        */
+/* "Software"), to deal in the Software without restriction, including    */
+/* without limitation the rights to use, copy, modify, merge, publish,    */
+/* distribute, sublicense, and/or sell copies of the Software, and to     */
+/* permit persons to whom the Software is furnished to do so, subject to  */
+/* the following conditions:                                              */
+/*                                                                        */
+/* The above copyright notice and this permission notice shall be         */
+/* included in all copies or substantial portions of the Software.        */
+/*                                                                        */
+/* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,        */
+/* EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF     */
+/* MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. */
+/* IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY   */
+/* CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,   */
+/* TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE      */
+/* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
+/**************************************************************************/
 
 #include "animation_blend_tree.h"
 
@@ -142,6 +142,19 @@ double AnimationNodeAnimation::process(double p_time, bool p_seek, bool p_is_ext
 				if (prev_time <= 0) {
 					step = 0;
 				}
+			}
+		}
+
+		// Emit start & finish signal. Internally, the detections are the same for backward.
+		// We should use call_deferred since the track keys are still being prosessed.
+		if (state->tree) {
+			// AnimationTree uses seek to 0 "internally" to process the first key of the animation, which is used as the start detection.
+			if (p_seek && !p_is_external_seeking && cur_time == 0) {
+				state->tree->call_deferred(SNAME("emit_signal"), "animation_started", animation);
+			}
+			// Finished.
+			if (prev_time < anim_size && cur_time >= anim_size) {
+				state->tree->call_deferred(SNAME("emit_signal"), "animation_finished", animation);
 			}
 		}
 	}
@@ -351,7 +364,7 @@ double AnimationNodeOneShot::process(double p_time, bool p_seek, bool p_is_exter
 	} else {
 		main_rem = blend_input(0, p_time, p_seek, p_is_external_seeking, 1.0 - blend, FILTER_BLEND, sync); // Unlike below, processing this edge is a corner case.
 	}
-	double os_rem = blend_input(1, os_seek ? cur_time : p_time, os_seek, p_is_external_seeking, MAX(CMP_EPSILON, blend), FILTER_PASS, true); // Blend values must be more than CMP_EPSILON to process discrete keys in edge.
+	double os_rem = blend_input(1, os_seek ? cur_time : p_time, os_seek, p_is_external_seeking, Math::is_zero_approx(blend) ? CMP_EPSILON : blend, FILTER_PASS, true); // Blend values must be more than CMP_EPSILON to process discrete keys in edge.
 
 	if (do_start) {
 		cur_remaining = os_rem;
@@ -769,17 +782,18 @@ double AnimationNodeTransition::process(double p_time, bool p_seek, bool p_is_ex
 		}
 
 		// Blend values must be more than CMP_EPSILON to process discrete keys in edge.
+		real_t blend_inv = 1.0 - blend;
 		if (from_start && !p_seek && switched) { //just switched, seek to start of current
-			rem = blend_input(cur_current, 0, true, p_is_external_seeking, MAX(CMP_EPSILON, 1.0 - blend), FILTER_IGNORE, true);
+			rem = blend_input(cur_current, 0, true, p_is_external_seeking, Math::is_zero_approx(blend_inv) ? CMP_EPSILON : blend_inv, FILTER_IGNORE, true);
 		} else {
-			rem = blend_input(cur_current, p_time, p_seek, p_is_external_seeking, MAX(CMP_EPSILON, 1.0 - blend), FILTER_IGNORE, true);
+			rem = blend_input(cur_current, p_time, p_seek, p_is_external_seeking, Math::is_zero_approx(blend_inv) ? CMP_EPSILON : blend_inv, FILTER_IGNORE, true);
 		}
 
 		if (p_seek) {
-			blend_input(cur_prev, p_time, true, p_is_external_seeking, MAX(CMP_EPSILON, blend), FILTER_IGNORE, true);
+			blend_input(cur_prev, p_time, true, p_is_external_seeking, Math::is_zero_approx(blend) ? CMP_EPSILON : blend, FILTER_IGNORE, true);
 			cur_time = p_time;
 		} else {
-			blend_input(cur_prev, p_time, false, p_is_external_seeking, MAX(CMP_EPSILON, blend), FILTER_IGNORE, true);
+			blend_input(cur_prev, p_time, false, p_is_external_seeking, Math::is_zero_approx(blend) ? CMP_EPSILON : blend, FILTER_IGNORE, true);
 			cur_time += p_time;
 			cur_prev_xfading -= p_time;
 			if (cur_prev_xfading < 0) {

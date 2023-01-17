@@ -381,14 +381,14 @@ namespace Godot
             }
             real_t radians = Mathf.DegToRad(fovyDegrees / (real_t)2.0);
             real_t deltaZ = zFar - zNear;
-            real_t sine = Mathf.Sin(radians);
+            (real_t sin, real_t cos) = Mathf.SinCos(radians);
 
-            if ((deltaZ == 0) || (sine == 0) || (aspect == 0))
+            if ((deltaZ == 0) || (sin == 0) || (aspect == 0))
             {
                 return Zero;
             }
 
-            real_t cotangent = Mathf.Cos(radians) / sine;
+            real_t cotangent = cos / sin;
 
             Projection proj = Projection.Identity;
 
@@ -652,7 +652,7 @@ namespace Godot
         /// added to the first and second values of the final column respectively.
         /// </summary>
         /// <param name="offset">The offset to apply to the projection.</param>
-        /// <returns>The offseted projection.</returns>
+        /// <returns>The offsetted projection.</returns>
         public readonly Projection JitterOffseted(Vector2 offset)
         {
             Projection proj = this;

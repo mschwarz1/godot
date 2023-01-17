@@ -137,7 +137,7 @@ public partial struct Variant : IDisposable
             Type.Rid => AsRID(),
             Type.Object => AsGodotObject(),
             Type.Callable => AsCallable(),
-            Type.Signal => AsSignalInfo(),
+            Type.Signal => AsSignal(),
             Type.Dictionary => AsGodotDictionary(),
             Type.Array => AsGodotArray(),
             Type.PackedByteArray => AsByteArray(),
@@ -212,7 +212,7 @@ public partial struct Variant : IDisposable
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public string AsString() =>
-        VariantUtils.ConvertToStringObject((godot_variant)NativeVar);
+        VariantUtils.ConvertToString((godot_variant)NativeVar);
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Vector2 AsVector2() =>
@@ -280,11 +280,11 @@ public partial struct Variant : IDisposable
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Callable AsCallable() =>
-        VariantUtils.ConvertToCallableManaged((godot_variant)NativeVar);
+        VariantUtils.ConvertToCallable((godot_variant)NativeVar);
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public SignalInfo AsSignalInfo() =>
-        VariantUtils.ConvertToSignalInfo((godot_variant)NativeVar);
+    public Signal AsSignal() =>
+        VariantUtils.ConvertToSignal((godot_variant)NativeVar);
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public byte[] AsByteArray() =>
@@ -329,11 +329,11 @@ public partial struct Variant : IDisposable
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Collections.Dictionary<TKey, TValue> AsGodotDictionary<TKey, TValue>() =>
-        VariantUtils.ConvertToDictionaryObject<TKey, TValue>((godot_variant)NativeVar);
+        VariantUtils.ConvertToDictionary<TKey, TValue>((godot_variant)NativeVar);
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Collections.Array<T> AsGodotArray<T>() =>
-        VariantUtils.ConvertToArrayObject<T>((godot_variant)NativeVar);
+        VariantUtils.ConvertToArray<T>((godot_variant)NativeVar);
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public StringName[] AsSystemArrayOfStringName() =>
@@ -353,11 +353,11 @@ public partial struct Variant : IDisposable
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public StringName AsStringName() =>
-        VariantUtils.ConvertToStringNameObject((godot_variant)NativeVar);
+        VariantUtils.ConvertToStringName((godot_variant)NativeVar);
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public NodePath AsNodePath() =>
-        VariantUtils.ConvertToNodePathObject((godot_variant)NativeVar);
+        VariantUtils.ConvertToNodePath((godot_variant)NativeVar);
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public RID AsRID() =>
@@ -365,11 +365,11 @@ public partial struct Variant : IDisposable
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Collections.Dictionary AsGodotDictionary() =>
-        VariantUtils.ConvertToDictionaryObject((godot_variant)NativeVar);
+        VariantUtils.ConvertToDictionary((godot_variant)NativeVar);
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Collections.Array AsGodotArray() =>
-        VariantUtils.ConvertToArrayObject((godot_variant)NativeVar);
+        VariantUtils.ConvertToArray((godot_variant)NativeVar);
 
     // Explicit conversion operators to supported types
 
@@ -464,7 +464,7 @@ public partial struct Variant : IDisposable
     public static explicit operator Callable(Variant from) => from.AsCallable();
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static explicit operator SignalInfo(Variant from) => from.AsSignalInfo();
+    public static explicit operator Signal(Variant from) => from.AsSignal();
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static explicit operator byte[](Variant from) => from.AsByteArray();
@@ -614,7 +614,7 @@ public partial struct Variant : IDisposable
     public static Variant CreateFrom(Callable from) => from;
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static Variant CreateFrom(SignalInfo from) => from;
+    public static Variant CreateFrom(Signal from) => from;
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static Variant CreateFrom(Span<byte> from) => from;
@@ -804,8 +804,8 @@ public partial struct Variant : IDisposable
         CreateTakingOwnershipOfDisposableValue(VariantUtils.CreateFromCallable(from));
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static implicit operator Variant(SignalInfo from) =>
-        CreateTakingOwnershipOfDisposableValue(VariantUtils.CreateFromSignalInfo(from));
+    public static implicit operator Variant(Signal from) =>
+        CreateTakingOwnershipOfDisposableValue(VariantUtils.CreateFromSignal(from));
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static implicit operator Variant(byte[] from) =>

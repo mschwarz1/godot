@@ -1,32 +1,32 @@
-/*************************************************************************/
-/*  gdscript.h                                                           */
-/*************************************************************************/
-/*                       This file is part of:                           */
-/*                           GODOT ENGINE                                */
-/*                      https://godotengine.org                          */
-/*************************************************************************/
-/* Copyright (c) 2007-2022 Juan Linietsky, Ariel Manzur.                 */
-/* Copyright (c) 2014-2022 Godot Engine contributors (cf. AUTHORS.md).   */
-/*                                                                       */
-/* Permission is hereby granted, free of charge, to any person obtaining */
-/* a copy of this software and associated documentation files (the       */
-/* "Software"), to deal in the Software without restriction, including   */
-/* without limitation the rights to use, copy, modify, merge, publish,   */
-/* distribute, sublicense, and/or sell copies of the Software, and to    */
-/* permit persons to whom the Software is furnished to do so, subject to */
-/* the following conditions:                                             */
-/*                                                                       */
-/* The above copyright notice and this permission notice shall be        */
-/* included in all copies or substantial portions of the Software.       */
-/*                                                                       */
-/* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,       */
-/* EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF    */
-/* MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.*/
-/* IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY  */
-/* CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,  */
-/* TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE     */
-/* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                */
-/*************************************************************************/
+/**************************************************************************/
+/*  gdscript.h                                                            */
+/**************************************************************************/
+/*                         This file is part of:                          */
+/*                             GODOT ENGINE                               */
+/*                        https://godotengine.org                         */
+/**************************************************************************/
+/* Copyright (c) 2014-present Godot Engine contributors (see AUTHORS.md). */
+/* Copyright (c) 2007-2014 Juan Linietsky, Ariel Manzur.                  */
+/*                                                                        */
+/* Permission is hereby granted, free of charge, to any person obtaining  */
+/* a copy of this software and associated documentation files (the        */
+/* "Software"), to deal in the Software without restriction, including    */
+/* without limitation the rights to use, copy, modify, merge, publish,    */
+/* distribute, sublicense, and/or sell copies of the Software, and to     */
+/* permit persons to whom the Software is furnished to do so, subject to  */
+/* the following conditions:                                              */
+/*                                                                        */
+/* The above copyright notice and this permission notice shall be         */
+/* included in all copies or substantial portions of the Software.        */
+/*                                                                        */
+/* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,        */
+/* EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF     */
+/* MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. */
+/* IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY   */
+/* CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,   */
+/* TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE      */
+/* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
+/**************************************************************************/
 
 #ifndef GDSCRIPT_H
 #define GDSCRIPT_H
@@ -62,13 +62,21 @@ class GDScript : public Script {
 	bool tool = false;
 	bool valid = false;
 	bool reloading = false;
-	bool skip_dependencies = false;
 
 	struct MemberInfo {
 		int index = 0;
 		StringName setter;
 		StringName getter;
 		GDScriptDataType data_type;
+	};
+
+	struct ClearData {
+		RBSet<GDScriptFunction *> functions;
+		RBSet<Ref<Script>> scripts;
+		void clear() {
+			functions.clear();
+			scripts.clear();
+		}
 	};
 
 	friend class GDScriptInstance;
@@ -157,7 +165,7 @@ class GDScript : public Script {
 
 	bool _update_exports(bool *r_err = nullptr, bool p_recursive_call = false, PlaceHolderScriptInstance *p_instance_to_update = nullptr);
 
-	void _save_orphaned_subclasses();
+	void _save_orphaned_subclasses(GDScript::ClearData *p_clear_data);
 	void _init_rpc_methods_properties();
 
 	void _get_script_property_list(List<PropertyInfo> *r_list, bool p_include_base) const;
@@ -180,14 +188,14 @@ protected:
 	static void _bind_methods();
 
 public:
-	void clear();
+	void clear(GDScript::ClearData *p_clear_data = nullptr);
 
 	virtual bool is_valid() const override { return valid; }
 
 	bool inherits_script(const Ref<Script> &p_script) const override;
 
 	GDScript *find_class(const String &p_qualified_name);
-	bool is_subclass(const GDScript *p_script);
+	bool has_class(const GDScript *p_script);
 	GDScript *get_root_script();
 	bool is_root_script() const { return _owner == nullptr; }
 	String get_fully_qualified_name() const { return fully_qualified_name; }
@@ -455,6 +463,9 @@ public:
 	_FORCE_INLINE_ Variant *get_global_array() { return _global_array; }
 	_FORCE_INLINE_ const HashMap<StringName, int> &get_global_map() const { return globals; }
 	_FORCE_INLINE_ const HashMap<StringName, Variant> &get_named_globals_map() const { return named_globals; }
+	// These two functions should be used when behavior needs to be consistent between in-editor and running the scene
+	bool has_any_global_constant(const StringName &p_name) { return named_globals.has(p_name) || globals.has(p_name); }
+	Variant get_any_global_constant(const StringName &p_name);
 
 	_FORCE_INLINE_ static GDScriptLanguage *get_singleton() { return singleton; }
 

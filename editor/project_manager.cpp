@@ -1,32 +1,32 @@
-/*************************************************************************/
-/*  project_manager.cpp                                                  */
-/*************************************************************************/
-/*                       This file is part of:                           */
-/*                           GODOT ENGINE                                */
-/*                      https://godotengine.org                          */
-/*************************************************************************/
-/* Copyright (c) 2007-2022 Juan Linietsky, Ariel Manzur.                 */
-/* Copyright (c) 2014-2022 Godot Engine contributors (cf. AUTHORS.md).   */
-/*                                                                       */
-/* Permission is hereby granted, free of charge, to any person obtaining */
-/* a copy of this software and associated documentation files (the       */
-/* "Software"), to deal in the Software without restriction, including   */
-/* without limitation the rights to use, copy, modify, merge, publish,   */
-/* distribute, sublicense, and/or sell copies of the Software, and to    */
-/* permit persons to whom the Software is furnished to do so, subject to */
-/* the following conditions:                                             */
-/*                                                                       */
-/* The above copyright notice and this permission notice shall be        */
-/* included in all copies or substantial portions of the Software.       */
-/*                                                                       */
-/* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,       */
-/* EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF    */
-/* MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.*/
-/* IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY  */
-/* CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,  */
-/* TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE     */
-/* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                */
-/*************************************************************************/
+/**************************************************************************/
+/*  project_manager.cpp                                                   */
+/**************************************************************************/
+/*                         This file is part of:                          */
+/*                             GODOT ENGINE                               */
+/*                        https://godotengine.org                         */
+/**************************************************************************/
+/* Copyright (c) 2014-present Godot Engine contributors (see AUTHORS.md). */
+/* Copyright (c) 2007-2014 Juan Linietsky, Ariel Manzur.                  */
+/*                                                                        */
+/* Permission is hereby granted, free of charge, to any person obtaining  */
+/* a copy of this software and associated documentation files (the        */
+/* "Software"), to deal in the Software without restriction, including    */
+/* without limitation the rights to use, copy, modify, merge, publish,    */
+/* distribute, sublicense, and/or sell copies of the Software, and to     */
+/* permit persons to whom the Software is furnished to do so, subject to  */
+/* the following conditions:                                              */
+/*                                                                        */
+/* The above copyright notice and this permission notice shall be         */
+/* included in all copies or substantial portions of the Software.        */
+/*                                                                        */
+/* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,        */
+/* EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF     */
+/* MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. */
+/* IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY   */
+/* CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,   */
+/* TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE      */
+/* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
+/**************************************************************************/
 
 #include "project_manager.h"
 
@@ -94,6 +94,7 @@ private:
 	Container *path_container;
 	Container *install_path_container;
 	Container *renderer_container;
+	Label *renderer_info;
 	HBoxContainer *default_files_container;
 	Ref<ButtonGroup> renderer_button_group;
 	Label *msg;
@@ -426,6 +427,35 @@ private:
 		ok_pressed();
 	}
 
+	void _renderer_selected() {
+		String renderer_type = renderer_button_group->get_pressed_button()->get_meta(SNAME("rendering_method"));
+
+		if (renderer_type == "forward_plus") {
+			renderer_info->set_text(
+					String::utf8("•  ") + TTR("Supports desktop platforms only.") +
+					String::utf8("\n•  ") + TTR("Advanced 3D graphics available.") +
+					String::utf8("\n•  ") + TTR("Can scale to large complex scenes.") +
+					String::utf8("\n•  ") + TTR("Uses RenderingDevice backend.") +
+					String::utf8("\n•  ") + TTR("Slower rendering of simple scenes."));
+		} else if (renderer_type == "mobile") {
+			renderer_info->set_text(
+					String::utf8("•  ") + TTR("Supports desktop + mobile platforms.") +
+					String::utf8("\n•  ") + TTR("Less advanced 3D graphics.") +
+					String::utf8("\n•  ") + TTR("Less scalable for complex scenes.") +
+					String::utf8("\n•  ") + TTR("Uses RenderingDevice backend.") +
+					String::utf8("\n•  ") + TTR("Fast rendering of simple scenes."));
+		} else if (renderer_type == "gl_compatibility") {
+			renderer_info->set_text(
+					String::utf8("•  ") + TTR("Supports desktop, mobile + web platforms.") +
+					String::utf8("\n•  ") + TTR("Least advanced 3D graphics (currently work-in-progress).") +
+					String::utf8("\n•  ") + TTR("Intended for low-end/older devices.") +
+					String::utf8("\n•  ") + TTR("Uses OpenGL 3 backend (OpenGL 3.3/ES 3.0/WebGL2).") +
+					String::utf8("\n•  ") + TTR("Fastest rendering of simple scenes."));
+		} else {
+			WARN_PRINT("Unknown renderer type. Please report this as a bug on GitHub.");
+		}
+	}
+
 	void ok_pressed() override {
 		String dir = project_path->get_text();
 
@@ -483,10 +513,15 @@ private:
 					String renderer_type = renderer_button_group->get_pressed_button()->get_meta(SNAME("rendering_method"));
 					initial_settings["rendering/renderer/rendering_method"] = renderer_type;
 
+					EditorSettings::get_singleton()->set("project_manager/default_renderer", renderer_type);
+					EditorSettings::get_singleton()->save();
+
 					if (renderer_type == "forward_plus") {
 						project_features.push_back("Forward Plus");
 					} else if (renderer_type == "mobile") {
 						project_features.push_back("Mobile");
+					} else if (renderer_type == "gl_compatibility") {
+						project_features.push_back("GL Compatibility");
 					} else {
 						WARN_PRINT("Unknown renderer type. Please report this as a bug on GitHub.");
 					}
@@ -860,42 +895,55 @@ public:
 		renderer_container->add_child(rshc);
 		renderer_button_group.instantiate();
 
+		// Left hand side, used for checkboxes to select renderer.
 		Container *rvb = memnew(VBoxContainer);
-		rvb->set_h_size_flags(Control::SIZE_EXPAND_FILL);
 		rshc->add_child(rvb);
+
+		String default_renderer_type = "forward_plus";
+		if (EditorSettings::get_singleton()->has_setting("project_manager/default_renderer")) {
+			default_renderer_type = EditorSettings::get_singleton()->get_setting("project_manager/default_renderer");
+		}
+
 		Button *rs_button = memnew(CheckBox);
 		rs_button->set_button_group(renderer_button_group);
 		rs_button->set_text(TTR("Forward+"));
 		rs_button->set_meta(SNAME("rendering_method"), "forward_plus");
-		rs_button->set_pressed(true);
+		rs_button->connect("pressed", callable_mp(this, &ProjectDialog::_renderer_selected));
 		rvb->add_child(rs_button);
-		l = memnew(Label);
-		l->set_text(
-				String::utf8("•  ") + TTR("Supports desktop platforms only.") +
-				String::utf8("\n•  ") + TTR("Advanced 3D graphics available.") +
-				String::utf8("\n•  ") + TTR("Can scale to large complex scenes.") +
-				String::utf8("\n•  ") + TTR("Slower rendering of simple scenes."));
-		l->set_modulate(Color(1, 1, 1, 0.7));
-		rvb->add_child(l);
+		if (default_renderer_type == "forward_plus") {
+			rs_button->set_pressed(true);
+		}
 
-		rshc->add_child(memnew(VSeparator));
-
-		rvb = memnew(VBoxContainer);
-		rvb->set_h_size_flags(Control::SIZE_EXPAND_FILL);
-		rshc->add_child(rvb);
 		rs_button = memnew(CheckBox);
 		rs_button->set_button_group(renderer_button_group);
 		rs_button->set_text(TTR("Mobile"));
 		rs_button->set_meta(SNAME("rendering_method"), "mobile");
+		rs_button->connect("pressed", callable_mp(this, &ProjectDialog::_renderer_selected));
 		rvb->add_child(rs_button);
-		l = memnew(Label);
-		l->set_text(
-				String::utf8("•  ") + TTR("Supports desktop + mobile platforms.") +
-				String::utf8("\n•  ") + TTR("Less advanced 3D graphics.") +
-				String::utf8("\n•  ") + TTR("Less scalable for complex scenes.") +
-				String::utf8("\n•  ") + TTR("Faster rendering of simple scenes."));
-		l->set_modulate(Color(1, 1, 1, 0.7));
-		rvb->add_child(l);
+		if (default_renderer_type == "mobile") {
+			rs_button->set_pressed(true);
+		}
+
+		rs_button = memnew(CheckBox);
+		rs_button->set_button_group(renderer_button_group);
+		rs_button->set_text(TTR("Compatibility"));
+		rs_button->set_meta(SNAME("rendering_method"), "gl_compatibility");
+		rs_button->connect("pressed", callable_mp(this, &ProjectDialog::_renderer_selected));
+		rvb->add_child(rs_button);
+		if (default_renderer_type == "gl_compatibility") {
+			rs_button->set_pressed(true);
+		}
+
+		rshc->add_child(memnew(VSeparator));
+
+		// Right hand side, used for text explaining each choice.
+		rvb = memnew(VBoxContainer);
+		rvb->set_h_size_flags(Control::SIZE_EXPAND_FILL);
+		rshc->add_child(rvb);
+		renderer_info = memnew(Label);
+		renderer_info->set_modulate(Color(1, 1, 1, 0.7));
+		rvb->add_child(renderer_info);
+		_renderer_selected();
 
 		l = memnew(Label);
 		l->set_text(TTR("The renderer can be changed later, but scenes may need to be adjusted."));
@@ -1185,7 +1233,7 @@ void ProjectList::load_project_icon(int p_index) {
 
 	// The default project icon is 128×128 to look crisp on hiDPI displays,
 	// but we want the actual displayed size to be 64×64 on loDPI displays.
-	item.control->icon->set_ignore_texture_size(true);
+	item.control->icon->set_expand_mode(TextureRect::EXPAND_IGNORE_SIZE);
 	item.control->icon->set_custom_minimum_size(Size2(64, 64) * EDSCALE);
 	item.control->icon->set_stretch_mode(TextureRect::STRETCH_KEEP_ASPECT_CENTERED);
 
@@ -1225,7 +1273,7 @@ ProjectList::Item ProjectList::load_project_data(const String &p_path, bool p_fa
 	PackedStringArray unsupported_features = ProjectSettings::get_unsupported_features(project_features);
 
 	uint64_t last_edited = 0;
-	if (FileAccess::exists(conf)) {
+	if (cf_err == OK) {
 		// The modification date marks the date the project was last edited.
 		// This is because the `project.godot` file will always be modified
 		// when editing a project (but not when running it).
@@ -2605,8 +2653,9 @@ ProjectManager::ProjectManager() {
 		AcceptDialog::set_swap_cancel_ok(swap_cancel_ok == 2);
 	}
 
-	set_anchors_and_offsets_preset(Control::PRESET_FULL_RECT);
-	set_theme(create_custom_theme());
+	Ref<Theme> theme = create_custom_theme();
+	set_theme(theme);
+	DisplayServer::set_early_window_clear_color_override(true, theme->get_color(SNAME("background"), SNAME("Editor")));
 
 	set_anchors_and_offsets_preset(Control::PRESET_FULL_RECT);
 
@@ -2960,22 +3009,24 @@ ProjectManager::ProjectManager() {
 	SceneTree::get_singleton()->get_root()->connect("files_dropped", callable_mp(this, &ProjectManager::_files_dropped));
 
 	// Define a minimum window size to prevent UI elements from overlapping or being cut off.
-	DisplayServer::get_singleton()->window_set_min_size(Size2(520, 350) * EDSCALE);
+	Window *w = Object::cast_to<Window>(SceneTree::get_singleton()->get_root());
+	if (w) {
+		w->set_min_size(Size2(520, 350) * EDSCALE);
+	}
 
 	// Resize the bootsplash window based on Editor display scale EDSCALE.
 	float scale_factor = MAX(1, EDSCALE);
 	if (scale_factor > 1.0) {
 		Vector2i window_size = DisplayServer::get_singleton()->window_get_size();
-		Vector2i screen_size = DisplayServer::get_singleton()->screen_get_size();
-		Vector2i screen_position = DisplayServer::get_singleton()->screen_get_position();
+		Rect2i screen_rect = DisplayServer::get_singleton()->screen_get_usable_rect(DisplayServer::get_singleton()->window_get_current_screen());
 
 		window_size *= scale_factor;
 
 		DisplayServer::get_singleton()->window_set_size(window_size);
-		if (screen_size != Vector2i()) {
+		if (screen_rect.size != Vector2i()) {
 			Vector2i window_position;
-			window_position.x = screen_position.x + (screen_size.x - window_size.x) / 2;
-			window_position.y = screen_position.y + (screen_size.y - window_size.y) / 2;
+			window_position.x = screen_rect.position.x + (screen_rect.size.x - window_size.x) / 2;
+			window_position.y = screen_rect.position.y + (screen_rect.size.y - window_size.y) / 2;
 			DisplayServer::get_singleton()->window_set_position(window_position);
 		}
 	}
