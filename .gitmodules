@@ -1,3 +1,6 @@
 [submodule "modules/voxel"]
 	path = modules/voxel
 	url = https://github.com/mschwarz1/godot_voxel.git
+[submodule "ActiveProjects/ProjectCubeSphere"]
+	path = ActiveProjects/ProjectCubeSphere
+	url = https://github.com/mschwarz1/ProjectCubeSphere.git
