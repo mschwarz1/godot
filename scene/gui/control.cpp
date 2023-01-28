@@ -1387,13 +1387,7 @@ Point2 Control::get_global_position() const {
 
 Point2 Control::get_screen_position() const {
 	ERR_FAIL_COND_V(!is_inside_tree(), Point2());
-	Point2 global_pos = get_global_transform_with_canvas().get_origin();
-	Window *w = Object::cast_to<Window>(get_viewport());
-	if (w && !w->is_embedding_subwindows()) {
-		global_pos += w->get_position();
-	}
-
-	return global_pos;
+	return get_screen_transform().get_origin();
 }
 
 void Control::_set_size(const Size2 &p_size) {
@@ -1444,24 +1438,20 @@ void Control::set_rect(const Rect2 &p_rect) {
 }
 
 Rect2 Control::get_rect() const {
-	return Rect2(get_position(), get_size());
+	Transform2D xform = get_transform();
+	return Rect2(xform.get_origin(), xform.get_scale() * get_size());
 }
 
 Rect2 Control::get_global_rect() const {
-	return Rect2(get_global_position(), get_size());
+	Transform2D xform = get_global_transform();
+	return Rect2(xform.get_origin(), xform.get_scale() * get_size());
 }
 
 Rect2 Control::get_screen_rect() const {
 	ERR_FAIL_COND_V(!is_inside_tree(), Rect2());
 
-	Rect2 r(get_global_position(), get_size());
-
-	Window *w = Object::cast_to<Window>(get_viewport());
-	if (w && !w->is_embedding_subwindows()) {
-		r.position += w->get_position();
-	}
-
-	return r;
+	Transform2D xform = get_screen_transform();
+	return Rect2(xform.get_origin(), xform.get_scale() * get_size());
 }
 
 Rect2 Control::get_anchorable_rect() const {
@@ -1580,10 +1570,6 @@ void Control::update_minimum_size() {
 
 void Control::set_block_minimum_size_adjust(bool p_block) {
 	data.block_minimum_size_adjust = p_block;
-}
-
-bool Control::is_minimum_size_adjust_blocked() const {
-	return data.block_minimum_size_adjust;
 }
 
 Size2 Control::get_minimum_size() const {
@@ -1822,19 +1808,6 @@ bool Control::is_focus_owner_in_shortcut_context() const {
 }
 
 // Drag and drop handling.
-
-void Control::set_drag_forwarding_compat(Object *p_base) {
-	if (p_base != nullptr) {
-		data.forward_drag = Callable(p_base, "_get_drag_data_fw").bind(this);
-		data.forward_can_drop = Callable(p_base, "_can_drop_data_fw").bind(this);
-		data.forward_drop = Callable(p_base, "_drop_data_fw").bind(this);
-
-	} else {
-		data.forward_drag = Callable();
-		data.forward_can_drop = Callable();
-		data.forward_drop = Callable();
-	}
-}
 
 void Control::set_drag_forwarding(const Callable &p_drag, const Callable &p_can_drop, const Callable &p_drop) {
 	data.forward_drag = p_drag;
@@ -2782,9 +2755,9 @@ void Control::end_bulk_theme_override() {
 
 // Internationalization.
 
-TypedArray<Vector2i> Control::structured_text_parser(TextServer::StructuredTextParser p_parser_type, const Array &p_args, const String &p_text) const {
+TypedArray<Vector3i> Control::structured_text_parser(TextServer::StructuredTextParser p_parser_type, const Array &p_args, const String &p_text) const {
 	if (p_parser_type == TextServer::STRUCTURED_TEXT_CUSTOM) {
-		TypedArray<Vector2i> ret;
+		TypedArray<Vector3i> ret;
 		GDVIRTUAL_CALL(_structured_text_parser, p_args, p_text, ret);
 		return ret;
 	} else {

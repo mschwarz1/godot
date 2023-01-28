@@ -87,11 +87,13 @@ public:
 		MENU_SELECT_ALL,
 		MENU_UNDO,
 		MENU_REDO,
+		MENU_SUBMENU_TEXT_DIR,
 		MENU_DIR_INHERITED,
 		MENU_DIR_AUTO,
 		MENU_DIR_LTR,
 		MENU_DIR_RTL,
 		MENU_DISPLAY_UCC,
+		MENU_SUBMENU_INSERT_UCC,
 		MENU_INSERT_LRM,
 		MENU_INSERT_RLM,
 		MENU_INSERT_LRE,
@@ -274,7 +276,7 @@ private:
 
 	void _update_placeholder();
 
-	/* Initialise to opposite first, so we get past the early-out in set_editable. */
+	/* Initialize to opposite first, so we get past the early-out in set_editable. */
 	bool editable = false;
 
 	TextDirection text_direction = TEXT_DIRECTION_AUTO;
@@ -303,8 +305,9 @@ private:
 	PopupMenu *menu_dir = nullptr;
 	PopupMenu *menu_ctl = nullptr;
 
-	void _generate_context_menu();
 	Key _get_menu_action_accelerator(const String &p_action);
+	void _generate_context_menu();
+	void _update_context_menu();
 
 	/* Versioning */
 	struct Caret;

@@ -266,7 +266,7 @@ void TileMapEditorTilesPlugin::_patterns_item_list_gui_input(const Ref<InputEven
 	}
 
 	Ref<TileSet> tile_set = tile_map->get_tileset();
-	if (!tile_set.is_valid()) {
+	if (!tile_set.is_valid() || EditorNode::get_singleton()->is_resource_read_only(tile_set)) {
 		return;
 	}
 
@@ -897,7 +897,7 @@ void TileMapEditorTilesPlugin::forward_canvas_draw_over_viewport(Control *p_over
 
 							// Compute the offset
 							Rect2i source_rect = atlas_source->get_tile_texture_region(E.value.get_atlas_coords());
-							Vector2i tile_offset = atlas_source->get_tile_effective_texture_offset(E.value.get_atlas_coords(), E.value.alternative_tile);
+							Vector2i tile_offset = tile_data->get_texture_origin();
 
 							// Compute the destination rectangle in the CanvasItem.
 							Rect2 dest_rect;
@@ -922,7 +922,7 @@ void TileMapEditorTilesPlugin::forward_canvas_draw_over_viewport(Control *p_over
 
 							// Get the tile modulation.
 							Color modulate = tile_data->get_modulate();
-							Color self_modulate = tile_map->get_self_modulate();
+							Color self_modulate = tile_map->get_modulate_in_tree() * tile_map->get_self_modulate();
 							modulate *= self_modulate;
 							modulate *= tile_map->get_layer_modulate(tile_map_layer);
 
@@ -1277,13 +1277,15 @@ void TileMapEditorTilesPlugin::_stop_dragging() {
 					tile_map->set_cell(tile_map_layer, kv.key, kv.value.source_id, kv.value.get_atlas_coords(), kv.value.alternative_tile);
 				}
 
-				// Creating a pattern in the pattern list.
-				select_last_pattern = true;
-				int new_pattern_index = tile_set->get_patterns_count();
-				undo_redo->create_action(TTR("Add TileSet pattern"));
-				undo_redo->add_do_method(*tile_set, "add_pattern", selection_pattern, new_pattern_index);
-				undo_redo->add_undo_method(*tile_set, "remove_pattern", new_pattern_index);
-				undo_redo->commit_action();
+				if (EditorNode::get_singleton()->is_resource_read_only(tile_set)) {
+					// Creating a pattern in the pattern list.
+					select_last_pattern = true;
+					int new_pattern_index = tile_set->get_patterns_count();
+					undo_redo->create_action(TTR("Add TileSet pattern"));
+					undo_redo->add_do_method(*tile_set, "add_pattern", selection_pattern, new_pattern_index);
+					undo_redo->add_undo_method(*tile_set, "remove_pattern", new_pattern_index);
+					undo_redo->commit_action();
+				}
 			} else {
 				// Get the top-left cell.
 				Vector2i top_left;
@@ -1989,6 +1991,15 @@ TypedArray<Vector2i> TileMapEditorTilesPlugin::_get_tile_map_selection() const {
 void TileMapEditorTilesPlugin::edit(ObjectID p_tile_map_id, int p_tile_map_layer) {
 	_stop_dragging(); // Avoids staying in a wrong drag state.
 
+	// Disable sort button if the tileset is read-only
+	TileMap *tile_map = Object::cast_to<TileMap>(ObjectDB::get_instance(tile_map_id));
+	if (tile_map) {
+		Ref<TileSet> tile_set = tile_map->get_tileset();
+		if (tile_set.is_valid()) {
+			source_sort_button->set_disabled(EditorNode::get_singleton()->is_resource_read_only(tile_set));
+		}
+	}
+
 	if (tile_map_id != p_tile_map_id) {
 		tile_map_id = p_tile_map_id;
 
@@ -2236,7 +2247,6 @@ TileMapEditorTilesPlugin::TileMapEditorTilesPlugin() {
 	scene_tiles_list = memnew(ItemList);
 	scene_tiles_list->set_h_size_flags(Control::SIZE_EXPAND_FILL);
 	scene_tiles_list->set_v_size_flags(Control::SIZE_EXPAND_FILL);
-	scene_tiles_list->set_drag_forwarding_compat(this);
 	scene_tiles_list->set_select_mode(ItemList::SELECT_MULTI);
 	scene_tiles_list->connect("multi_selected", callable_mp(this, &TileMapEditorTilesPlugin::_scenes_list_multi_selected));
 	scene_tiles_list->connect("empty_clicked", callable_mp(this, &TileMapEditorTilesPlugin::_scenes_list_lmb_empty_clicked));
@@ -3089,8 +3099,8 @@ void TileMapEditorTerrainsPlugin::_update_terrains_cache() {
 	per_terrain_terrains_patterns.resize(tile_set->get_terrain_sets_count());
 	for (int i = 0; i < tile_set->get_terrain_sets_count(); i++) {
 		per_terrain_terrains_patterns[i].resize(tile_set->get_terrains_count(i));
-		for (int j = 0; j < (int)per_terrain_terrains_patterns[i].size(); j++) {
-			per_terrain_terrains_patterns[i][j].clear();
+		for (RBSet<TileSet::TerrainsPattern> &pattern : per_terrain_terrains_patterns[i]) {
+			pattern.clear();
 		}
 	}
 
@@ -3520,8 +3530,8 @@ void TileMapEditor::_update_bottom_panel() {
 
 	// Update the visibility of controls.
 	missing_tileset_label->set_visible(!tile_set.is_valid());
-	for (unsigned int tab_index = 0; tab_index < tabs_data.size(); tab_index++) {
-		tabs_data[tab_index].panel->hide();
+	for (TileMapEditorPlugin::TabData &tab_data : tabs_data) {
+		tab_data.panel->hide();
 	}
 	if (tile_set.is_valid()) {
 		tabs_data[tabs_bar->get_current_tab()].panel->show();
@@ -3610,15 +3620,15 @@ void TileMapEditor::_tab_changed(int p_tab_id) {
 	tabs_plugins[tabs_bar->get_current_tab()]->edit(tile_map_id, tile_map_layer);
 
 	// Update toolbar.
-	for (unsigned int tab_index = 0; tab_index < tabs_data.size(); tab_index++) {
-		tabs_data[tab_index].toolbar->hide();
+	for (TileMapEditorPlugin::TabData &tab_data : tabs_data) {
+		tab_data.toolbar->hide();
 	}
 	tabs_data[p_tab_id].toolbar->show();
 
 	// Update visible panel.
 	TileMap *tile_map = Object::cast_to<TileMap>(ObjectDB::get_instance(tile_map_id));
-	for (unsigned int tab_index = 0; tab_index < tabs_data.size(); tab_index++) {
-		tabs_data[tab_index].panel->hide();
+	for (TileMapEditorPlugin::TabData &tab_data : tabs_data) {
+		tab_data.panel->hide();
 	}
 	if (tile_map && tile_map->get_tileset().is_valid()) {
 		tabs_data[tabs_bar->get_current_tab()].panel->show();
@@ -3987,7 +3997,7 @@ TileMapEditor::TileMapEditor() {
 	tabs_bar->connect("tab_changed", callable_mp(this, &TileMapEditor::_tab_changed));
 
 	// --- TileMap toolbar ---
-	tile_map_toolbar = memnew(HBoxContainer);
+	tile_map_toolbar = memnew(HFlowContainer);
 	tile_map_toolbar->set_h_size_flags(SIZE_EXPAND_FILL);
 	add_child(tile_map_toolbar);
 
@@ -3995,15 +4005,18 @@ TileMapEditor::TileMapEditor() {
 	tile_map_toolbar->add_child(tabs_bar);
 
 	// Tabs toolbars.
-	for (unsigned int tab_index = 0; tab_index < tabs_data.size(); tab_index++) {
-		tabs_data[tab_index].toolbar->hide();
-		if (!tabs_data[tab_index].toolbar->get_parent()) {
-			tile_map_toolbar->add_child(tabs_data[tab_index].toolbar);
+	for (TileMapEditorPlugin::TabData &tab_data : tabs_data) {
+		tab_data.toolbar->hide();
+		if (!tab_data.toolbar->get_parent()) {
+			tile_map_toolbar->add_child(tab_data.toolbar);
 		}
 	}
 
-	// Wide empty separation control.
-	tile_map_toolbar->add_spacer();
+	// Wide empty separation control. (like BoxContainer::add_spacer())
+	Control *c = memnew(Control);
+	c->set_mouse_filter(MOUSE_FILTER_PASS);
+	c->set_h_size_flags(SIZE_EXPAND_FILL);
+	tile_map_toolbar->add_child(c);
 
 	// Layer selector.
 	layers_selection_button = memnew(OptionButton);

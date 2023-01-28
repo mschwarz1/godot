@@ -93,11 +93,13 @@ private:
 		int get_line() const;
 		int get_index() const;
 		char32_t peek();
+		int consume_line_continuations(int p_offset);
 
 		void get_and_clear_generated(Vector<Token> *r_out);
 		void backtrack(char32_t p_what);
 		LocalVector<Token> advance(char32_t p_what);
 		void skip_whitespace();
+		bool consume_empty_line();
 		String get_identifier(bool *r_is_cursor = nullptr, bool p_started = false);
 		String peek_identifier();
 		Token get_token();
@@ -167,7 +169,6 @@ private:
 private:
 	LocalVector<char32_t> output;
 	State *state = nullptr;
-	bool state_owner = false;
 
 private:
 	static bool is_char_word(char32_t p_char);
@@ -211,7 +212,7 @@ private:
 
 	static Define *create_define(const String &p_body);
 
-	void clear();
+	void clear_state();
 
 	Error preprocess(State *p_state, const String &p_code, String &r_result);
 

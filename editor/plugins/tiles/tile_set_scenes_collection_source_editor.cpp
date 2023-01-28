@@ -284,7 +284,7 @@ void TileSetScenesCollectionSourceEditor::_update_tile_inspector() {
 
 void TileSetScenesCollectionSourceEditor::_update_action_buttons() {
 	Vector<int> selected_indices = scene_tiles_list->get_selected_items();
-	scene_tile_delete_button->set_disabled(selected_indices.size() <= 0);
+	scene_tile_delete_button->set_disabled(selected_indices.size() <= 0 || read_only);
 }
 
 void TileSetScenesCollectionSourceEditor::_update_scenes_list() {
@@ -342,6 +342,12 @@ void TileSetScenesCollectionSourceEditor::_notification(int p_what) {
 
 		case NOTIFICATION_INTERNAL_PROCESS: {
 			if (tile_set_scenes_collection_source_changed_needs_update) {
+				read_only = false;
+				// Add the listener again and check for read-only status.
+				if (tile_set.is_valid()) {
+					read_only = EditorNode::get_singleton()->is_resource_read_only(tile_set);
+				}
+
 				// Update everything.
 				_update_source_inspector();
 				_update_scenes_list();
@@ -365,7 +371,12 @@ void TileSetScenesCollectionSourceEditor::edit(Ref<TileSet> p_tile_set, TileSetS
 	ERR_FAIL_COND(p_source_id < 0);
 	ERR_FAIL_COND(p_tile_set->get_source(p_source_id) != p_tile_set_scenes_collection_source);
 
-	if (p_tile_set == tile_set && p_tile_set_scenes_collection_source == tile_set_scenes_collection_source && p_source_id == tile_set_source_id) {
+	bool new_read_only_state = false;
+	if (p_tile_set.is_valid()) {
+		new_read_only_state = EditorNode::get_singleton()->is_resource_read_only(p_tile_set);
+	}
+
+	if (p_tile_set == tile_set && p_tile_set_scenes_collection_source == tile_set_scenes_collection_source && p_source_id == tile_set_source_id && new_read_only_state == read_only) {
 		return;
 	}
 
@@ -378,6 +389,16 @@ void TileSetScenesCollectionSourceEditor::edit(Ref<TileSet> p_tile_set, TileSetS
 	tile_set = p_tile_set;
 	tile_set_scenes_collection_source = p_tile_set_scenes_collection_source;
 	tile_set_source_id = p_source_id;
+
+	// Read-only status is false by default
+	read_only = new_read_only_state;
+
+	if (tile_set.is_valid()) {
+		scenes_collection_source_inspector->set_read_only(read_only);
+		tile_inspector->set_read_only(read_only);
+
+		scene_tile_add_button->set_disabled(read_only);
+	}
 
 	// Add the listener again.
 	if (tile_set_scenes_collection_source) {
@@ -453,8 +474,6 @@ void TileSetScenesCollectionSourceEditor::_bind_methods() {
 	ADD_SIGNAL(MethodInfo("source_id_changed", PropertyInfo(Variant::INT, "source_id")));
 
 	ClassDB::bind_method(D_METHOD("_scene_thumbnail_done"), &TileSetScenesCollectionSourceEditor::_scene_thumbnail_done);
-	ClassDB::bind_method(D_METHOD("_can_drop_data_fw"), &TileSetScenesCollectionSourceEditor::_can_drop_data_fw);
-	ClassDB::bind_method(D_METHOD("_drop_data_fw"), &TileSetScenesCollectionSourceEditor::_drop_data_fw);
 }
 
 TileSetScenesCollectionSourceEditor::TileSetScenesCollectionSourceEditor() {
@@ -509,7 +528,7 @@ TileSetScenesCollectionSourceEditor::TileSetScenesCollectionSourceEditor() {
 	scene_tiles_list = memnew(ItemList);
 	scene_tiles_list->set_h_size_flags(SIZE_EXPAND_FILL);
 	scene_tiles_list->set_v_size_flags(SIZE_EXPAND_FILL);
-	scene_tiles_list->set_drag_forwarding_compat(this);
+	SET_DRAG_FORWARDING_CDU(scene_tiles_list, TileSetScenesCollectionSourceEditor);
 	scene_tiles_list->connect("item_selected", callable_mp(this, &TileSetScenesCollectionSourceEditor::_update_tile_inspector).unbind(1));
 	scene_tiles_list->connect("item_selected", callable_mp(this, &TileSetScenesCollectionSourceEditor::_update_action_buttons).unbind(1));
 	scene_tiles_list->connect("item_activated", callable_mp(this, &TileSetScenesCollectionSourceEditor::_scenes_list_item_activated));

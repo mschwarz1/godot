@@ -2174,6 +2174,8 @@ Error ScriptEditor::_save_text_file(Ref<TextFile> p_text_file, const String &p_p
 		p_text_file->set_last_modified_time(FileAccess::get_modified_time(p_path));
 	}
 
+	EditorFileSystem::get_singleton()->update_file(p_path);
+
 	_res_saved_callback(sqscr);
 	return OK;
 }
@@ -2492,7 +2494,6 @@ void ScriptEditor::save_all_scripts() {
 	}
 
 	_update_script_names();
-	EditorFileSystem::get_singleton()->update_script_classes();
 }
 
 void ScriptEditor::apply_scripts() const {
@@ -3615,10 +3616,6 @@ void ScriptEditor::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("register_syntax_highlighter", "syntax_highlighter"), &ScriptEditor::register_syntax_highlighter);
 	ClassDB::bind_method(D_METHOD("unregister_syntax_highlighter", "syntax_highlighter"), &ScriptEditor::unregister_syntax_highlighter);
 
-	ClassDB::bind_method(D_METHOD("_get_drag_data_fw", "point", "from"), &ScriptEditor::get_drag_data_fw);
-	ClassDB::bind_method(D_METHOD("_can_drop_data_fw", "point", "data", "from"), &ScriptEditor::can_drop_data_fw);
-	ClassDB::bind_method(D_METHOD("_drop_data_fw", "point", "data", "from"), &ScriptEditor::drop_data_fw);
-
 	ClassDB::bind_method(D_METHOD("goto_line", "line_number"), &ScriptEditor::_goto_script_line2);
 	ClassDB::bind_method(D_METHOD("get_current_script"), &ScriptEditor::_get_current_script);
 	ClassDB::bind_method(D_METHOD("get_open_scripts"), &ScriptEditor::_get_open_scripts);
@@ -3674,7 +3671,7 @@ ScriptEditor::ScriptEditor() {
 	_sort_list_on_update = true;
 	script_list->connect("item_clicked", callable_mp(this, &ScriptEditor::_script_list_clicked), CONNECT_DEFERRED);
 	script_list->set_allow_rmb_select(true);
-	script_list->set_drag_forwarding_compat(this);
+	SET_DRAG_FORWARDING_GCD(script_list, ScriptEditor);
 
 	context_menu = memnew(PopupMenu);
 	add_child(context_menu);
@@ -4008,12 +4005,6 @@ void ScriptEditorPlugin::save_external_data() {
 
 void ScriptEditorPlugin::apply_changes() {
 	script_editor->apply_scripts();
-}
-
-void ScriptEditorPlugin::restore_global_state() {
-}
-
-void ScriptEditorPlugin::save_global_state() {
 }
 
 void ScriptEditorPlugin::set_window_layout(Ref<ConfigFile> p_layout) {

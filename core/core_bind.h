@@ -162,7 +162,8 @@ public:
 
 	bool has_environment(const String &p_var) const;
 	String get_environment(const String &p_var) const;
-	bool set_environment(const String &p_var, const String &p_value) const;
+	void set_environment(const String &p_var, const String &p_value) const;
+	void unset_environment(const String &p_var) const;
 
 	String get_name() const;
 	String get_distribution_name() const;
@@ -360,7 +361,7 @@ class Mutex : public RefCounted {
 
 public:
 	void lock();
-	Error try_lock();
+	bool try_lock();
 	void unlock();
 };
 
@@ -372,7 +373,7 @@ class Semaphore : public RefCounted {
 
 public:
 	void wait();
-	Error try_wait();
+	bool try_wait();
 	void post();
 };
 

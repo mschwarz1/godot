@@ -122,7 +122,7 @@ bool CreateDialog::_should_hide_type(const String &p_type) const {
 		return true;
 	}
 
-	if (base_type == "Node" && p_type.begins_with("Editor")) {
+	if (is_base_type_node && p_type.begins_with("Editor")) {
 		return true; // Do not show editor nodes.
 	}
 
@@ -508,6 +508,11 @@ String CreateDialog::get_selected_type() {
 	return selected->get_text(0);
 }
 
+void CreateDialog::set_base_type(const String &p_base) {
+	base_type = p_base;
+	is_base_type_node = ClassDB::is_parent_class(p_base, "Node");
+}
+
 Variant CreateDialog::instantiate_selected() {
 	TreeItem *selected = search_options->get_selected();
 
@@ -724,12 +729,6 @@ void CreateDialog::_load_favorites_and_history() {
 }
 
 void CreateDialog::_bind_methods() {
-	ClassDB::bind_method(D_METHOD("_save_and_update_favorite_list"), &CreateDialog::_save_and_update_favorite_list);
-
-	ClassDB::bind_method("_get_drag_data_fw", &CreateDialog::get_drag_data_fw);
-	ClassDB::bind_method("_can_drop_data_fw", &CreateDialog::can_drop_data_fw);
-	ClassDB::bind_method("_drop_data_fw", &CreateDialog::drop_data_fw);
-
 	ADD_SIGNAL(MethodInfo("create"));
 	ADD_SIGNAL(MethodInfo("favorites_updated"));
 }
@@ -759,7 +758,7 @@ CreateDialog::CreateDialog() {
 	favorites->connect("cell_selected", callable_mp(this, &CreateDialog::_favorite_selected));
 	favorites->connect("item_activated", callable_mp(this, &CreateDialog::_favorite_activated));
 	favorites->add_theme_constant_override("draw_guides", 1);
-	favorites->set_drag_forwarding_compat(this);
+	SET_DRAG_FORWARDING_GCD(favorites, CreateDialog);
 	fav_vb->add_margin_child(TTR("Favorites:"), favorites, true);
 
 	VBoxContainer *rec_vb = memnew(VBoxContainer);

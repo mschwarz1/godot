@@ -262,7 +262,7 @@ Ref<Resource> Resource::duplicate(bool p_subresources) const {
 
 		if ((p.get_type() == Variant::DICTIONARY || p.get_type() == Variant::ARRAY)) {
 			r->set(E.name, p.duplicate(p_subresources));
-		} else if (p.get_type() == Variant::OBJECT && (p_subresources || (E.usage & PROPERTY_USAGE_DO_NOT_SHARE_ON_DUPLICATE))) {
+		} else if (p.get_type() == Variant::OBJECT && !(E.usage & PROPERTY_USAGE_NEVER_DUPLICATE) && (p_subresources || (E.usage & PROPERTY_USAGE_ALWAYS_DUPLICATE))) {
 			Ref<Resource> sr = p;
 			if (sr.is_valid()) {
 				r->set(E.name, sr->duplicate(p_subresources));
@@ -385,10 +385,6 @@ void Resource::set_as_translation_remapped(bool p_remapped) {
 	ResourceCache::lock.unlock();
 }
 
-bool Resource::is_translation_remapped() const {
-	return remapped_list.in_list();
-}
-
 #ifdef TOOLS_ENABLED
 //helps keep IDs same number when loading/saving scenes. -1 clears ID and it Returns -1 when no id stored
 void Resource::set_id_for_path(const String &p_path, const String &p_id) {
@@ -479,9 +475,6 @@ void ResourceCache::clear() {
 	}
 
 	resources.clear();
-}
-
-void ResourceCache::reload_externals() {
 }
 
 bool ResourceCache::has(const String &p_path) {

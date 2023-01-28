@@ -385,6 +385,8 @@ public:
 		SOURCE_2D_NORMAL,
 		SOURCE_DEPTH,
 		SOURCE_PORT,
+		SOURCE_3D_NORMAL,
+		SOURCE_ROUGHNESS,
 		SOURCE_MAX,
 	};
 
@@ -668,6 +670,7 @@ public:
 	virtual String get_output_port_name(int p_port) const override;
 	virtual bool has_output_port_preview(int p_port) const override;
 
+	virtual String generate_global(Shader::Mode p_mode, VisualShader::Type p_type, int p_id) const override;
 	virtual String generate_code(Shader::Mode p_mode, VisualShader::Type p_type, int p_id, const String *p_input_vars, const String *p_output_vars, bool p_for_preview = false) const override;
 
 	VisualShaderNodeLinearSceneDepth();
@@ -1533,9 +1536,17 @@ public:
 		FUNC_MAX,
 	};
 
+	enum Precision {
+		PRECISION_NONE,
+		PRECISION_COARSE,
+		PRECISION_FINE,
+		PRECISION_MAX,
+	};
+
 protected:
 	OpType op_type = OP_TYPE_SCALAR;
 	Function func = FUNC_SUM;
+	Precision precision = PRECISION_NONE;
 
 protected:
 	static void _bind_methods();
@@ -1552,12 +1563,16 @@ public:
 	virtual String get_output_port_name(int p_port) const override;
 
 	virtual String generate_code(Shader::Mode p_mode, VisualShader::Type p_type, int p_id, const String *p_input_vars, const String *p_output_vars, bool p_for_preview = false) const override;
+	virtual String get_warning(Shader::Mode p_mode, VisualShader::Type p_type) const override;
 
 	void set_op_type(OpType p_op_type);
 	OpType get_op_type() const;
 
 	void set_function(Function p_func);
 	Function get_function() const;
+
+	void set_precision(Precision p_precision);
+	Precision get_precision() const;
 
 	virtual Vector<StringName> get_editable_properties() const override;
 
@@ -1566,6 +1581,7 @@ public:
 
 VARIANT_ENUM_CAST(VisualShaderNodeDerivativeFunc::OpType)
 VARIANT_ENUM_CAST(VisualShaderNodeDerivativeFunc::Function)
+VARIANT_ENUM_CAST(VisualShaderNodeDerivativeFunc::Precision)
 
 ///////////////////////////////////////
 /// FACEFORWARD
@@ -2362,11 +2378,20 @@ public:
 		REPEAT_MAX,
 	};
 
+	enum TextureSource {
+		SOURCE_NONE,
+		SOURCE_SCREEN,
+		SOURCE_DEPTH,
+		SOURCE_NORMAL_ROUGHNESS,
+		SOURCE_MAX,
+	};
+
 protected:
 	TextureType texture_type = TYPE_DATA;
 	ColorDefault color_default = COLOR_DEFAULT_WHITE;
 	TextureFilter texture_filter = FILTER_DEFAULT;
 	TextureRepeat texture_repeat = REPEAT_DEFAULT;
+	TextureSource texture_source = SOURCE_NONE;
 
 protected:
 	static void _bind_methods();
@@ -2398,6 +2423,9 @@ public:
 	void set_texture_repeat(TextureRepeat p_repeat);
 	TextureRepeat get_texture_repeat() const;
 
+	void set_texture_source(TextureSource p_source);
+	TextureSource get_texture_source() const;
+
 	bool is_qualifier_supported(Qualifier p_qual) const override;
 	bool is_convertible_to_constant() const override;
 
@@ -2408,6 +2436,7 @@ VARIANT_ENUM_CAST(VisualShaderNodeTextureParameter::TextureType)
 VARIANT_ENUM_CAST(VisualShaderNodeTextureParameter::ColorDefault)
 VARIANT_ENUM_CAST(VisualShaderNodeTextureParameter::TextureFilter)
 VARIANT_ENUM_CAST(VisualShaderNodeTextureParameter::TextureRepeat)
+VARIANT_ENUM_CAST(VisualShaderNodeTextureParameter::TextureSource)
 
 ///////////////////////////////////////
 
@@ -2833,6 +2862,7 @@ public:
 	virtual String get_output_port_name(int p_port) const override;
 	virtual bool has_output_port_preview(int p_port) const override;
 
+	virtual String generate_global(Shader::Mode p_mode, VisualShader::Type p_type, int p_id) const override;
 	virtual String generate_code(Shader::Mode p_mode, VisualShader::Type p_type, int p_id, const String *p_input_vars, const String *p_output_vars, bool p_for_preview = false) const override;
 
 	VisualShaderNodeProximityFade();

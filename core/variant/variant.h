@@ -655,6 +655,7 @@ public:
 
 	static bool has_indexing(Variant::Type p_type);
 	static Variant::Type get_indexed_element_type(Variant::Type p_type);
+	static uint32_t get_indexed_element_usage(Variant::Type p_type);
 
 	typedef void (*ValidatedIndexedSetter)(Variant *base, int64_t index, const Variant *value, bool *oob);
 	typedef void (*ValidatedIndexedGetter)(const Variant *base, int64_t index, Variant *value, bool *oob);
@@ -747,6 +748,7 @@ public:
 	uint32_t recursive_hash(int recursion_count) const;
 
 	bool hash_compare(const Variant &p_variant, int recursion_count = 0) const;
+	bool identity_compare(const Variant &p_variant) const;
 	bool booleanize() const;
 	String stringify(int recursion_count = 0) const;
 	String to_json_string() const;

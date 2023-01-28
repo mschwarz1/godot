@@ -45,6 +45,8 @@ class TileSetEditor : public VBoxContainer {
 	static TileSetEditor *singleton;
 
 private:
+	bool read_only = false;
+
 	Ref<TileSet> tile_set;
 	bool tile_set_changed_needs_update = false;
 	HSplitContainer *split_container = nullptr;
@@ -97,7 +99,6 @@ private:
 
 protected:
 	void _notification(int p_what);
-	static void _bind_methods();
 
 public:
 	_FORCE_INLINE_ static TileSetEditor *get_singleton() { return singleton; }

@@ -17,6 +17,8 @@ namespace GodotTools.Export
 {
     public partial class ExportPlugin : EditorExportPlugin
     {
+        public override string _GetName() => "C#";
+
         private List<string> _tempFolders = new List<string>();
 
         public void RegisterExportSettings()
@@ -69,7 +71,7 @@ namespace GodotTools.Export
             }
         }
 
-        public override void _ExportBegin(string[] features, bool isDebug, string path, long flags)
+        public override void _ExportBegin(string[] features, bool isDebug, string path, uint flags)
         {
             base._ExportBegin(features, isDebug, path, flags);
 

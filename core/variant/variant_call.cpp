@@ -1695,6 +1695,7 @@ static void _register_variant_builtin_methods() {
 	bind_string_method(json_escape, sarray(), varray());
 
 	bind_string_method(validate_node_name, sarray(), varray());
+	bind_string_method(validate_filename, sarray(), varray());
 
 	bind_string_method(is_valid_identifier, sarray(), varray());
 	bind_string_method(is_valid_int, sarray(), varray());
@@ -2135,7 +2136,7 @@ static void _register_variant_builtin_methods() {
 	bind_static_method(Projection, create_depth_correction, sarray("flip_y"), varray());
 	bind_static_method(Projection, create_light_atlas_rect, sarray("rect"), varray());
 	bind_static_method(Projection, create_perspective, sarray("fovy", "aspect", "z_near", "z_far", "flip_fov"), varray(false));
-	bind_static_method(Projection, create_perspective_hmd, sarray("fovy", "aspect", "z_near", "z_far", "flip_fov", "eye", "intraocular_dist", " convergence_dist"), varray());
+	bind_static_method(Projection, create_perspective_hmd, sarray("fovy", "aspect", "z_near", "z_far", "flip_fov", "eye", "intraocular_dist", "convergence_dist"), varray());
 	bind_static_method(Projection, create_for_hmd, sarray("eye", "aspect", "intraocular_dist", "display_width", "display_to_lens", "oversample", "z_near", "z_far"), varray());
 	bind_static_method(Projection, create_orthogonal, sarray("left", "right", "bottom", "top", "z_near", "z_far"), varray());
 	bind_static_method(Projection, create_orthogonal_aspect, sarray("size", "aspect", "z_near", "z_far", "flip_fov"), varray(false));
@@ -2179,6 +2180,8 @@ static void _register_variant_builtin_methods() {
 	bind_method(Dictionary, values, sarray(), varray());
 	bind_method(Dictionary, duplicate, sarray("deep"), varray(false));
 	bind_method(Dictionary, get, sarray("key", "default"), varray(Variant()));
+	bind_method(Dictionary, make_read_only, sarray(), varray());
+	bind_method(Dictionary, is_read_only, sarray(), varray());
 
 	/* Array */
 
@@ -2226,7 +2229,7 @@ static void _register_variant_builtin_methods() {
 	bind_method(Array, get_typed_builtin, sarray(), varray());
 	bind_method(Array, get_typed_class_name, sarray(), varray());
 	bind_method(Array, get_typed_script, sarray(), varray());
-	bind_method(Array, set_read_only, sarray("enable"), varray());
+	bind_method(Array, make_read_only, sarray(), varray());
 	bind_method(Array, is_read_only, sarray(), varray());
 
 	/* Byte Array */
