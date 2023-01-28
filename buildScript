@@ -9,7 +9,7 @@ scons module_mono_enabled=yes precision=double -j8
 cp -r ../GodotNugetSourceData   ${APPDATA}/NuGet/GodotNugetSource
 cp -r ../GodotNugetSourceData   ${APPDATA}/NuGet/LocalNugetSource
 
-if [[ -z "${TEMPLATES}" ]] ; then
+if [[ -n "${TEMPLATES}" ]] ; then
     scons target=template_release tools=no module_mono_enabled=yes precision=double -j8
     scons target=template_debug tools=no module_mono_enabled=yes precision=double -j8
 fi
