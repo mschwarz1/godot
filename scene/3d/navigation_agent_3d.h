@@ -52,15 +52,14 @@ class NavigationAgent3D : public Node {
 
 	real_t path_desired_distance = 1.0;
 	real_t target_desired_distance = 1.0;
-	real_t radius = 0.0;
+	real_t radius = 0.5;
 	real_t navigation_height_offset = 0.0;
-	bool ignore_y = false;
-	real_t neighbor_distance = 0.0;
-	int max_neighbors = 0;
-	real_t time_horizon = 0.0;
-	real_t max_speed = 0.0;
-
-	real_t path_max_distance = 3.0;
+	bool ignore_y = true;
+	real_t neighbor_distance = 50.0;
+	int max_neighbors = 10;
+	real_t time_horizon = 1.0;
+	real_t max_speed = 10.0;
+	real_t path_max_distance = 5.0;
 
 	Vector3 target_position;
 	bool target_position_submitted = false;
@@ -75,6 +74,24 @@ class NavigationAgent3D : public Node {
 	bool navigation_finished = true;
 	// No initialized on purpose
 	uint32_t update_frame_id = 0;
+
+	// Debug properties for exposed bindings
+	bool debug_enabled = false;
+	float debug_path_custom_point_size = 4.0;
+	bool debug_use_custom = false;
+	Color debug_path_custom_color = Color(1.0, 1.0, 1.0, 1.0);
+#ifdef DEBUG_ENABLED
+	// Debug properties internal only
+	bool debug_path_dirty = true;
+	RID debug_path_instance;
+	Ref<ArrayMesh> debug_path_mesh;
+	Ref<StandardMaterial3D> debug_agent_path_line_custom_material;
+	Ref<StandardMaterial3D> debug_agent_path_point_custom_material;
+
+private:
+	void _navigation_debug_changed();
+	void _update_debug_path();
+#endif // DEBUG_ENABLED
 
 protected:
 	static void _bind_methods();
@@ -180,6 +197,18 @@ public:
 	void _avoidance_done(Vector3 p_new_velocity);
 
 	PackedStringArray get_configuration_warnings() const override;
+
+	void set_debug_enabled(bool p_enabled);
+	bool get_debug_enabled() const;
+
+	void set_debug_use_custom(bool p_enabled);
+	bool get_debug_use_custom() const;
+
+	void set_debug_path_custom_color(Color p_color);
+	Color get_debug_path_custom_color() const;
+
+	void set_debug_path_custom_point_size(float p_point_size);
+	float get_debug_path_custom_point_size() const;
 
 private:
 	void update_navigation();

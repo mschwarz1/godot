@@ -91,6 +91,7 @@ public:
 	struct SuiteNode;
 	struct TernaryOpNode;
 	struct TypeNode;
+	struct TypeTestNode;
 	struct UnaryOpNode;
 	struct VariableNode;
 	struct WhileNode;
@@ -122,7 +123,9 @@ public:
 		TypeSource type_source = UNDETECTED;
 
 		bool is_constant = false;
+		bool is_read_only = false;
 		bool is_meta_type = false;
+		bool is_pseudo_type = false; // For global names that can't be used standalone.
 		bool is_coroutine = false; // For function calls.
 
 		Variant::Type builtin_type = Variant::NIL;
@@ -190,7 +193,7 @@ public:
 				case SCRIPT:
 					return script_type == p_other.script_type;
 				case CLASS:
-					return class_type == p_other.class_type;
+					return class_type == p_other.class_type || class_type->fqcn == p_other.class_type->fqcn;
 				case RESOLVING:
 				case UNRESOLVED:
 					break;
@@ -206,8 +209,10 @@ public:
 		void operator=(const DataType &p_other) {
 			kind = p_other.kind;
 			type_source = p_other.type_source;
+			is_read_only = p_other.is_read_only;
 			is_constant = p_other.is_constant;
 			is_meta_type = p_other.is_meta_type;
+			is_pseudo_type = p_other.is_pseudo_type;
 			is_coroutine = p_other.is_coroutine;
 			builtin_type = p_other.builtin_type;
 			native_type = p_other.native_type;
@@ -286,6 +291,7 @@ public:
 			SUITE,
 			TERNARY_OPERATOR,
 			TYPE,
+			TYPE_TEST,
 			UNARY_OPERATOR,
 			VARIABLE,
 			WHILE,
@@ -297,7 +303,9 @@ public:
 		int leftmost_column = 0, rightmost_column = 0;
 		Node *next = nullptr;
 		List<AnnotationNode *> annotations;
-		Vector<uint32_t> ignored_warnings;
+#ifdef DEBUG_ENABLED
+		Vector<GDScriptWarning::Code> ignored_warnings;
+#endif
 
 		DataType datatype;
 
@@ -329,8 +337,10 @@ public:
 
 		AnnotationInfo *info = nullptr;
 		PropertyInfo export_info;
+		bool is_resolved = false;
+		bool is_applied = false;
 
-		bool apply(GDScriptParser *p_this, Node *p_target) const;
+		bool apply(GDScriptParser *p_this, Node *p_target);
 		bool applies_to(uint32_t p_target_kinds) const;
 
 		AnnotationNode() {
@@ -420,7 +430,6 @@ public:
 			OP_BIT_XOR,
 			OP_LOGIC_AND,
 			OP_LOGIC_OR,
-			OP_TYPE_TEST,
 			OP_CONTENT_TEST,
 			OP_COMP_EQUAL,
 			OP_COMP_NOT_EQUAL,
@@ -970,6 +979,7 @@ public:
 
 	struct ReturnNode : public Node {
 		ExpressionNode *return_value = nullptr;
+		bool void_return = false;
 
 		ReturnNode() {
 			type = RETURN;
@@ -1143,6 +1153,16 @@ public:
 		}
 	};
 
+	struct TypeTestNode : public ExpressionNode {
+		ExpressionNode *operand = nullptr;
+		TypeNode *test_type = nullptr;
+		DataType test_datatype;
+
+		TypeTestNode() {
+			type = TYPE_TEST;
+		}
+	};
+
 	struct UnaryOpNode : public ExpressionNode {
 		enum OpType {
 			OP_POSITIVE,
@@ -1262,8 +1282,7 @@ private:
 #ifdef DEBUG_ENABLED
 	bool is_ignoring_warnings = false;
 	List<GDScriptWarning> warnings;
-	HashSet<String> ignored_warnings;
-	HashSet<uint32_t> ignored_warning_codes;
+	HashSet<GDScriptWarning::Code> ignored_warnings;
 	HashSet<int> unsafe_lines;
 #endif
 
@@ -1401,7 +1420,7 @@ private:
 	// Annotations
 	AnnotationNode *parse_annotation(uint32_t p_valid_targets);
 	bool register_annotation(const MethodInfo &p_info, uint32_t p_target_kinds, AnnotationAction p_apply, const Vector<Variant> &p_default_arguments = Vector<Variant>(), bool p_is_vararg = false);
-	bool validate_annotation_argument_count(AnnotationNode *p_annotation);
+	bool validate_annotation_arguments(AnnotationNode *p_annotation);
 	void clear_unused_annotations();
 	bool tool_annotation(const AnnotationNode *p_annotation, Node *p_target);
 	bool icon_annotation(const AnnotationNode *p_annotation, Node *p_target);
@@ -1454,6 +1473,7 @@ private:
 	ExpressionNode *parse_attribute(ExpressionNode *p_previous_operand, bool p_can_assign);
 	ExpressionNode *parse_subscript(ExpressionNode *p_previous_operand, bool p_can_assign);
 	ExpressionNode *parse_lambda(ExpressionNode *p_previous_operand, bool p_can_assign);
+	ExpressionNode *parse_type_test(ExpressionNode *p_previous_operand, bool p_can_assign);
 	ExpressionNode *parse_yield(ExpressionNode *p_previous_operand, bool p_can_assign);
 	ExpressionNode *parse_invalid_token(ExpressionNode *p_previous_operand, bool p_can_assign);
 	TypeNode *parse_type(bool p_allow_void = false);
@@ -1535,8 +1555,9 @@ public:
 		void print_statement(Node *p_statement);
 		void print_subscript(SubscriptNode *p_subscript);
 		void print_suite(SuiteNode *p_suite);
-		void print_type(TypeNode *p_type);
 		void print_ternary_op(TernaryOpNode *p_ternary_op);
+		void print_type(TypeNode *p_type);
+		void print_type_test(TypeTestNode *p_type_test);
 		void print_unary_op(UnaryOpNode *p_unary_op);
 		void print_variable(VariableNode *p_variable);
 		void print_while(WhileNode *p_while);

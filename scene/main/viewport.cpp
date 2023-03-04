@@ -36,6 +36,7 @@
 #include "core/object/message_queue.h"
 #include "core/string/translation.h"
 #include "core/templates/pair.h"
+#include "core/templates/sort_array.h"
 #include "scene/2d/audio_listener_2d.h"
 #include "scene/2d/camera_2d.h"
 #include "scene/2d/collision_object_2d.h"
@@ -165,6 +166,24 @@ ViewportTexture::~ViewportTexture() {
 }
 
 void Viewport::_sub_window_update_order() {
+	if (gui.sub_windows.size() < 2) {
+		return;
+	}
+
+	if (!gui.sub_windows[gui.sub_windows.size() - 1].window->get_flag(Window::FLAG_ALWAYS_ON_TOP)) {
+		int index = gui.sub_windows.size() - 1;
+
+		while (index > 0 && gui.sub_windows[index - 1].window->get_flag(Window::FLAG_ALWAYS_ON_TOP)) {
+			--index;
+		}
+
+		if (index != (gui.sub_windows.size() - 1)) {
+			SubWindow sw = gui.sub_windows[gui.sub_windows.size() - 1];
+			gui.sub_windows.remove_at(gui.sub_windows.size() - 1);
+			gui.sub_windows.insert(index, sw);
+		}
+	}
+
 	for (int i = 0; i < gui.sub_windows.size(); i++) {
 		RS::get_singleton()->canvas_item_set_draw_index(gui.sub_windows[i].canvas_item, i);
 	}
@@ -379,7 +398,7 @@ void Viewport::_notification(int p_what) {
 			if (get_tree()->is_debugging_collisions_hint()) {
 				PhysicsServer2D::get_singleton()->space_set_debug_contacts(find_world_2d()->get_space(), get_tree()->get_collision_debug_contact_count());
 				contact_2d_debug = RenderingServer::get_singleton()->canvas_item_create();
-				RenderingServer::get_singleton()->canvas_item_set_parent(contact_2d_debug, find_world_2d()->get_canvas());
+				RenderingServer::get_singleton()->canvas_item_set_parent(contact_2d_debug, current_canvas);
 #ifndef _3D_DISABLED
 				PhysicsServer3D::get_singleton()->space_set_debug_contacts(find_world_3d()->get_space(), get_tree()->get_collision_debug_contact_count());
 				contact_3d_debug_multimesh = RenderingServer::get_singleton()->multimesh_create();
@@ -524,7 +543,12 @@ void Viewport::_process_picking() {
 	if (!physics_object_picking) {
 		return;
 	}
-	if (to_screen_rect != Rect2i() && Input::get_singleton()->get_mouse_mode() == Input::MOUSE_MODE_CAPTURED) {
+	if (Object::cast_to<Window>(this) && Input::get_singleton()->get_mouse_mode() == Input::MOUSE_MODE_CAPTURED) {
+		return;
+	}
+	if (!gui.mouse_in_viewport) {
+		// Clear picking events if mouse has left viewport.
+		physics_picking_events.clear();
 		return;
 	}
 
@@ -608,7 +632,7 @@ void Viewport::_process_picking() {
 				physics_last_mouse_state.mouse_mask.clear_flag(mouse_button_to_mask(mb->get_button_index()));
 
 				// If touch mouse raised, assume we don't know last mouse pos until new events come
-				if (mb->get_device() == InputEvent::DEVICE_ID_TOUCH_MOUSE) {
+				if (mb->get_device() == InputEvent::DEVICE_ID_EMULATION) {
 					physics_has_last_mousepos = false;
 				}
 			}
@@ -664,6 +688,25 @@ void Viewport::_process_picking() {
 				point_params.pick_point = true;
 
 				int rc = ss2d->intersect_point(point_params, res, 64);
+				if (physics_object_picking_sort) {
+					struct ComparatorCollisionObjects {
+						bool operator()(const PhysicsDirectSpaceState2D::ShapeResult &p_a, const PhysicsDirectSpaceState2D::ShapeResult &p_b) const {
+							CollisionObject2D *a = Object::cast_to<CollisionObject2D>(p_a.collider);
+							CollisionObject2D *b = Object::cast_to<CollisionObject2D>(p_b.collider);
+							if (!a || !b) {
+								return false;
+							}
+							int za = a->get_effective_z_index();
+							int zb = b->get_effective_z_index();
+							if (za != zb) {
+								return zb < za;
+							}
+							return a->is_greater_than(b);
+						}
+					};
+					SortArray<PhysicsDirectSpaceState2D::ShapeResult, ComparatorCollisionObjects> sorter;
+					sorter.sort(res, rc);
+				}
 				for (int i = 0; i < rc; i++) {
 					if (res[i].collider_id.is_valid() && res[i].collider) {
 						CollisionObject2D *co = Object::cast_to<CollisionObject2D>(res[i].collider);
@@ -791,16 +834,22 @@ void Viewport::update_canvas_items() {
 	_update_canvas_items(this);
 }
 
-void Viewport::_set_size(const Size2i &p_size, const Size2i &p_size_2d_override, const Rect2i &p_to_screen_rect, const Transform2D &p_stretch_transform, bool p_allocated) {
-	if (size == p_size && size_allocated == p_allocated && stretch_transform == p_stretch_transform && p_size_2d_override == size_2d_override && to_screen_rect == p_to_screen_rect) {
+void Viewport::_set_size(const Size2i &p_size, const Size2i &p_size_2d_override, bool p_allocated) {
+	Transform2D stretch_transform_new = Transform2D();
+	if (is_size_2d_override_stretch_enabled() && p_size_2d_override.width > 0 && p_size_2d_override.height > 0) {
+		Size2 scale = Size2(p_size) / Size2(p_size_2d_override);
+		stretch_transform_new.scale(scale);
+	}
+
+	Size2i new_size = p_size.max(Size2i(2, 2));
+	if (size == new_size && size_allocated == p_allocated && stretch_transform == stretch_transform_new && p_size_2d_override == size_2d_override) {
 		return;
 	}
 
-	size = p_size;
+	size = new_size;
 	size_allocated = p_allocated;
 	size_2d_override = p_size_2d_override;
-	stretch_transform = p_stretch_transform;
-	to_screen_rect = p_to_screen_rect;
+	stretch_transform = stretch_transform_new;
 
 #ifndef _3D_DISABLED
 	if (!use_xr) {
@@ -1042,7 +1091,30 @@ Camera2D *Viewport::get_camera_2d() const {
 }
 
 Transform2D Viewport::get_final_transform() const {
-	return _get_input_pre_xform().affine_inverse() * stretch_transform * global_canvas_transform;
+	return stretch_transform * global_canvas_transform;
+}
+
+void Viewport::assign_next_enabled_camera_2d(const StringName &p_camera_group) {
+	List<Node *> camera_list;
+	get_tree()->get_nodes_in_group(p_camera_group, &camera_list);
+
+	Camera2D *new_camera = nullptr;
+	for (Node *E : camera_list) {
+		Camera2D *cam = Object::cast_to<Camera2D>(E);
+		if (!cam) {
+			continue; // Non-camera node (e.g. ParallaxBackground).
+		}
+
+		if (cam->is_enabled()) {
+			new_camera = cam;
+			break;
+		}
+	}
+
+	_camera_2d_set(new_camera);
+	if (!camera_2d) {
+		set_canvas_transform(Transform2D());
+	}
 }
 
 void Viewport::_update_canvas_items(Node *p_node) {
@@ -1109,17 +1181,6 @@ Viewport::PositionalShadowAtlasQuadrantSubdiv Viewport::get_positional_shadow_at
 	return positional_shadow_atlas_quadrant_subdiv[p_quadrant];
 }
 
-Transform2D Viewport::_get_input_pre_xform() const {
-	Transform2D pre_xf;
-
-	if (to_screen_rect.size.x != 0 && to_screen_rect.size.y != 0) {
-		pre_xf.columns[2] = -to_screen_rect.position;
-		pre_xf.scale(Vector2(size) / to_screen_rect.size);
-	}
-
-	return pre_xf;
-}
-
 Ref<InputEvent> Viewport::_make_input_local(const Ref<InputEvent> &ev) {
 	if (ev.is_null()) {
 		return ev; // No transformation defined for null event
@@ -1130,11 +1191,16 @@ Ref<InputEvent> Viewport::_make_input_local(const Ref<InputEvent> &ev) {
 }
 
 Vector2 Viewport::get_mouse_position() const {
-	return gui.last_mouse_pos;
+	if (DisplayServer::get_singleton()->has_feature(DisplayServer::FEATURE_MOUSE)) {
+		return get_screen_transform_internal(true).affine_inverse().xform(DisplayServer::get_singleton()->mouse_get_position());
+	} else {
+		// Fallback to Input for getting mouse position in case of emulated mouse.
+		return get_screen_transform_internal().affine_inverse().xform(Input::get_singleton()->get_mouse_position());
+	}
 }
 
 void Viewport::warp_mouse(const Vector2 &p_position) {
-	Transform2D xform = get_screen_transform();
+	Transform2D xform = get_screen_transform_internal();
 	Vector2 gpos = xform.xform(p_position);
 	Input::get_singleton()->warp_mouse(gpos);
 }
@@ -1264,7 +1330,7 @@ void Viewport::_gui_show_tooltip() {
 	Window *window = gui.tooltip_popup->get_parent_visible_window();
 	Rect2i vr;
 	if (gui.tooltip_popup->is_embedded()) {
-		vr = gui.tooltip_popup->_get_embedder()->get_visible_rect();
+		vr = gui.tooltip_popup->get_embedder()->get_visible_rect();
 	} else {
 		vr = window->get_usable_parent_rect();
 	}
@@ -1306,7 +1372,7 @@ bool Viewport::_gui_call_input(Control *p_control, const Ref<InputEvent> &p_inpu
 	Ref<InputEvent> ev = p_input;
 
 	// Returns true if an event should be impacted by a control's mouse filter.
-	bool is_mouse_event = Ref<InputEventMouse>(p_input).is_valid();
+	bool is_pointer_event = Ref<InputEventMouse>(p_input).is_valid() || Ref<InputEventScreenDrag>(p_input).is_valid() || Ref<InputEventScreenTouch>(p_input).is_valid();
 
 	Ref<InputEventMouseButton> mb = p_input;
 	bool is_scroll_event = mb.is_valid() &&
@@ -1330,8 +1396,8 @@ bool Viewport::_gui_call_input(Control *p_control, const Ref<InputEvent> &p_inpu
 				stopped = true;
 				break;
 			}
-			if (control->data.mouse_filter == Control::MOUSE_FILTER_STOP && is_mouse_event && !(is_scroll_event && control->data.force_pass_scroll_events)) {
-				// Mouse events are stopped by default with MOUSE_FILTER_STOP, unless we have a scroll event and force_pass_scroll_events set to true
+			if (control->data.mouse_filter == Control::MOUSE_FILTER_STOP && is_pointer_event && !(is_scroll_event && control->data.force_pass_scroll_events)) {
+				// Mouse, ScreenDrag and ScreenTouch events are stopped by default with MOUSE_FILTER_STOP, unless we have a scroll event and force_pass_scroll_events set to true
 				stopped = true;
 				break;
 			}
@@ -1785,7 +1851,7 @@ void Viewport::_gui_input_event(Ref<InputEvent> p_event) {
 				Window *w = Object::cast_to<Window>(this);
 				if (w) {
 					if (w->is_embedded()) {
-						embedder = w->_get_embedder();
+						embedder = w->get_embedder();
 
 						viewport_pos = get_final_transform().xform(mpos) + w->get_position(); // To parent coords.
 					}
@@ -2248,6 +2314,7 @@ void Viewport::_drop_mouse_focus() {
 			mb->set_global_position(c->get_local_mouse_position());
 			mb->set_button_index(MouseButton(i + 1));
 			mb->set_pressed(false);
+			mb->set_device(InputEvent::DEVICE_ID_INTERNAL);
 			c->_call_gui_input(mb);
 		}
 	}
@@ -2359,6 +2426,7 @@ void Viewport::_post_gui_grab_click_focus() {
 				mb->set_position(click);
 				mb->set_button_index(MouseButton(i + 1));
 				mb->set_pressed(false);
+				mb->set_device(InputEvent::DEVICE_ID_INTERNAL);
 				gui.mouse_focus->_call_gui_input(mb);
 			}
 		}
@@ -2376,6 +2444,7 @@ void Viewport::_post_gui_grab_click_focus() {
 				mb->set_position(click);
 				mb->set_button_index(MouseButton(i + 1));
 				mb->set_pressed(true);
+				mb->set_device(InputEvent::DEVICE_ID_INTERNAL);
 				MessageQueue::get_singleton()->push_callable(callable_mp(gui.mouse_focus, &Control::_call_gui_input), mb);
 			}
 		}
@@ -2511,20 +2580,14 @@ bool Viewport::_sub_windows_forward_input(const Ref<InputEvent> &p_event) {
 			if (gui.subwindow_drag == SUB_WINDOW_DRAG_RESIZE) {
 				Vector2i diff = mm->get_position() - gui.subwindow_drag_from;
 				Size2i min_size = gui.subwindow_focused->get_min_size();
+				Size2i min_size_clamped = gui.subwindow_focused->get_clamped_minimum_size();
 
-				Size2i min_size_adjusted = min_size;
-				if (gui.subwindow_focused->is_wrapping_controls()) {
-					Size2i cms = gui.subwindow_focused->get_contents_minimum_size();
-					min_size_adjusted.x = MAX(cms.x, min_size.x);
-					min_size_adjusted.y = MAX(cms.y, min_size.y);
-				}
-
-				min_size_adjusted.x = MAX(min_size_adjusted.x, 1);
-				min_size_adjusted.y = MAX(min_size_adjusted.y, 1);
+				min_size_clamped.x = MAX(min_size_clamped.x, 1);
+				min_size_clamped.y = MAX(min_size_clamped.y, 1);
 
 				Rect2i r = gui.subwindow_resize_from_rect;
 
-				Size2i limit = r.size - min_size_adjusted;
+				Size2i limit = r.size - min_size_clamped;
 
 				switch (gui.subwindow_resize_mode) {
 					case SUB_WINDOW_RESIZE_TOP_LEFT: {
@@ -2840,6 +2903,14 @@ void Viewport::set_physics_object_picking(bool p_enable) {
 
 bool Viewport::get_physics_object_picking() {
 	return physics_object_picking;
+}
+
+void Viewport::set_physics_object_picking_sort(bool p_enable) {
+	physics_object_picking_sort = p_enable;
+}
+
+bool Viewport::get_physics_object_picking_sort() {
+	return physics_object_picking_sort;
 }
 
 Vector2 Viewport::get_camera_coords(const Vector2 &p_viewport_coords) const {
@@ -3235,6 +3306,10 @@ Viewport::SDFScale Viewport::get_sdf_scale() const {
 }
 
 Transform2D Viewport::get_screen_transform() const {
+	return get_screen_transform_internal();
+}
+
+Transform2D Viewport::get_screen_transform_internal(bool p_absolute_position) const {
 	return get_final_transform();
 }
 
@@ -3776,6 +3851,8 @@ void Viewport::_bind_methods() {
 
 	ClassDB::bind_method(D_METHOD("set_physics_object_picking", "enable"), &Viewport::set_physics_object_picking);
 	ClassDB::bind_method(D_METHOD("get_physics_object_picking"), &Viewport::get_physics_object_picking);
+	ClassDB::bind_method(D_METHOD("set_physics_object_picking_sort", "enable"), &Viewport::set_physics_object_picking_sort);
+	ClassDB::bind_method(D_METHOD("get_physics_object_picking_sort"), &Viewport::get_physics_object_picking_sort);
 
 	ClassDB::bind_method(D_METHOD("get_viewport_rid"), &Viewport::get_viewport_rid);
 	ClassDB::bind_method(D_METHOD("push_text_input", "text"), &Viewport::push_text_input);
@@ -3927,6 +4004,7 @@ void Viewport::_bind_methods() {
 #endif
 	ADD_GROUP("Physics", "physics_");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "physics_object_picking"), "set_physics_object_picking", "get_physics_object_picking");
+	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "physics_object_picking_sort"), "set_physics_object_picking_sort", "get_physics_object_picking_sort");
 	ADD_GROUP("GUI", "gui_");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "gui_disable_input"), "set_disable_input", "is_input_disabled");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "gui_snap_controls_to_pixels"), "set_snap_controls_to_pixels", "is_snap_controls_to_pixels_enabled");
@@ -4098,9 +4176,26 @@ Viewport::~Viewport() {
 /////////////////////////////////
 
 void SubViewport::set_size(const Size2i &p_size) {
-	_set_size(p_size, _get_size_2d_override(), Rect2i(), _stretch_transform(), true);
+	_internal_set_size(p_size);
+}
 
+void SubViewport::set_size_force(const Size2i &p_size) {
+	// Use only for setting the size from the parent SubViewportContainer with enabled stretch mode.
+	// Don't expose function to scripting.
+	_internal_set_size(p_size, true);
+}
+
+void SubViewport::_internal_set_size(const Size2i &p_size, bool p_force) {
 	SubViewportContainer *c = Object::cast_to<SubViewportContainer>(get_parent());
+	if (!p_force && c && c->is_stretch_enabled()) {
+#ifdef DEBUG_ENABLED
+		WARN_PRINT("Can't change the size of a `SubViewport` with a `SubViewportContainer` parent that has `stretch` enabled. Set `SubViewportContainer.stretch` to `false` to allow changing the size manually.");
+#endif // DEBUG_ENABLED
+		return;
+	}
+
+	_set_size(p_size, _get_size_2d_override(), true);
+
 	if (c) {
 		c->update_minimum_size();
 	}
@@ -4111,7 +4206,7 @@ Size2i SubViewport::get_size() const {
 }
 
 void SubViewport::set_size_2d_override(const Size2i &p_size) {
-	_set_size(_get_size(), p_size, Rect2i(), _stretch_transform(), true);
+	_set_size(_get_size(), p_size, true);
 }
 
 Size2i SubViewport::get_size_2d_override() const {
@@ -4124,7 +4219,7 @@ void SubViewport::set_size_2d_override_stretch(bool p_enable) {
 	}
 
 	size_2d_override_stretch = p_enable;
-	_set_size(_get_size(), _get_size_2d_override(), Rect2i(), _stretch_transform(), true);
+	_set_size(_get_size(), _get_size_2d_override(), true);
 }
 
 bool SubViewport::is_size_2d_override_stretch_enabled() const {
@@ -4153,29 +4248,18 @@ DisplayServer::WindowID SubViewport::get_window_id() const {
 	return DisplayServer::INVALID_WINDOW_ID;
 }
 
-Transform2D SubViewport::_stretch_transform() {
-	Transform2D transform;
-	Size2i view_size_2d_override = _get_size_2d_override();
-	if (size_2d_override_stretch && view_size_2d_override.width > 0 && view_size_2d_override.height > 0) {
-		Size2 scale = Size2(_get_size()) / Size2(view_size_2d_override);
-		transform.scale(scale);
-	}
-
-	return transform;
-}
-
-Transform2D SubViewport::get_screen_transform() const {
+Transform2D SubViewport::get_screen_transform_internal(bool p_absolute_position) const {
 	Transform2D container_transform;
 	SubViewportContainer *c = Object::cast_to<SubViewportContainer>(get_parent());
 	if (c) {
 		if (c->is_stretch_enabled()) {
 			container_transform.scale(Vector2(c->get_stretch_shrink(), c->get_stretch_shrink()));
 		}
-		container_transform = c->get_viewport()->get_screen_transform() * c->get_global_transform_with_canvas() * container_transform;
+		container_transform = c->get_viewport()->get_screen_transform_internal(p_absolute_position) * c->get_global_transform_with_canvas() * container_transform;
 	} else {
 		WARN_PRINT_ONCE("SubViewport is not a child of a SubViewportContainer. get_screen_transform doesn't return the actual screen position.");
 	}
-	return container_transform * Viewport::get_screen_transform();
+	return container_transform * get_final_transform();
 }
 
 Transform2D SubViewport::get_popup_base_transform() const {
@@ -4184,13 +4268,13 @@ Transform2D SubViewport::get_popup_base_transform() const {
 	}
 	SubViewportContainer *c = Object::cast_to<SubViewportContainer>(get_parent());
 	if (!c) {
-		return Viewport::get_screen_transform();
+		return get_final_transform();
 	}
 	Transform2D container_transform;
 	if (c->is_stretch_enabled()) {
 		container_transform.scale(Vector2(c->get_stretch_shrink(), c->get_stretch_shrink()));
 	}
-	return c->get_screen_transform() * container_transform * Viewport::get_screen_transform();
+	return c->get_screen_transform() * container_transform * get_final_transform();
 }
 
 void SubViewport::_notification(int p_what) {

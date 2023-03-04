@@ -490,6 +490,7 @@ Error EditorExportPlatformWindows::_code_sign(const Ref<EditorExportPreset> &p_p
 		return FAILED;
 	}
 #else
+	int id_type = 1;
 	if (p_preset->get("codesign/identity") != "") {
 		args.push_back("-pkcs12");
 		args.push_back(p_preset->get("codesign/identity"));
@@ -500,7 +501,7 @@ Error EditorExportPlatformWindows::_code_sign(const Ref<EditorExportPreset> &p_p
 #endif
 
 	//password
-	if (p_preset->get("codesign/password") != "") {
+	if ((id_type == 1) && (p_preset->get("codesign/password") != "")) {
 #ifdef WINDOWS_ENABLED
 		args.push_back("/p");
 #else
@@ -574,7 +575,7 @@ Error EditorExportPlatformWindows::_code_sign(const Ref<EditorExportPreset> &p_p
 	String str;
 	Error err = OS::get_singleton()->execute(signtool_path, args, &str, nullptr, true);
 	if (err != OK || (str.find("not found") != -1) || (str.find("not recognized") != -1)) {
-#ifndef WINDOWS_ENABLED
+#ifdef WINDOWS_ENABLED
 		add_message(EXPORT_MESSAGE_WARNING, TTR("Code Signing"), TTR("Could not start signtool executable. Configure signtool path in the Editor Settings (Export > Windows > signtool), or disable \"Codesign\" in the export preset."));
 #else
 		add_message(EXPORT_MESSAGE_WARNING, TTR("Code Signing"), TTR("Could not start osslsigncode executable. Configure signtool path in the Editor Settings (Export > Windows > osslsigncode), or disable \"Codesign\" in the export preset."));
@@ -878,7 +879,11 @@ Error EditorExportPlatformWindows::run(const Ref<EditorExportPreset> &p_preset, 
 	print_line("Creating temporary directory...");
 	ep.step(TTR("Creating temporary directory..."), 2);
 	String temp_dir;
+#ifndef WINDOWS_ENABLED
 	err = ssh_run_on_remote(host, port, extra_args_ssh, "powershell -command \\\"\\$tmp = Join-Path \\$Env:Temp \\$(New-Guid); New-Item -Type Directory -Path \\$tmp | Out-Null; Write-Output \\$tmp\\\"", &temp_dir);
+#else
+	err = ssh_run_on_remote(host, port, extra_args_ssh, "powershell -command \"$tmp = Join-Path $Env:Temp $(New-Guid); New-Item -Type Directory -Path $tmp ^| Out-Null; Write-Output $tmp\"", &temp_dir);
+#endif
 	if (err != OK || temp_dir.is_empty()) {
 		CLEANUP_AND_RETURN(err);
 	}
@@ -888,6 +893,10 @@ Error EditorExportPlatformWindows::run(const Ref<EditorExportPreset> &p_preset, 
 	err = ssh_push_to_remote(host, port, extra_args_scp, basepath + ".zip", temp_dir);
 	if (err != OK) {
 		CLEANUP_AND_RETURN(err);
+	}
+
+	if (cmd_args.is_empty()) {
+		cmd_args = " ";
 	}
 
 	{

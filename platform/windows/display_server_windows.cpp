@@ -829,6 +829,10 @@ void DisplayServerWindows::delete_sub_window(WindowID p_window) {
 	}
 	DestroyWindow(windows[p_window].hWnd);
 	windows.erase(p_window);
+
+	if (last_focused_window == p_window) {
+		last_focused_window = INVALID_WINDOW_ID;
+	}
 }
 
 void DisplayServerWindows::gl_window_make_current(DisplayServer::WindowID p_window_id) {
@@ -991,15 +995,6 @@ void DisplayServerWindows::window_set_current_screen(int p_screen, WindowID p_wi
 		wpos.y = CLAMP(wpos.y, srect.position.y, srect.position.y + srect.size.height - wsize.height / 3);
 		window_set_position(wpos, p_window);
 	}
-
-	// Don't let the mouse leave the window when resizing to a smaller resolution.
-	if (mouse_mode == MOUSE_MODE_CONFINED || mouse_mode == MOUSE_MODE_CONFINED_HIDDEN) {
-		RECT crect;
-		GetClientRect(wd.hWnd, &crect);
-		ClientToScreen(wd.hWnd, (POINT *)&crect.left);
-		ClientToScreen(wd.hWnd, (POINT *)&crect.right);
-		ClipCursor(&crect);
-	}
 }
 
 Point2i DisplayServerWindows::window_get_position(WindowID p_window) const {
@@ -1076,15 +1071,6 @@ void DisplayServerWindows::window_set_position(const Point2i &p_position, Window
 
 	AdjustWindowRectEx(&rc, style, false, exStyle);
 	MoveWindow(wd.hWnd, rc.left, rc.top, rc.right - rc.left, rc.bottom - rc.top, TRUE);
-
-	// Don't let the mouse leave the window when moved.
-	if (mouse_mode == MOUSE_MODE_CONFINED || mouse_mode == MOUSE_MODE_CONFINED_HIDDEN) {
-		RECT rect;
-		GetClientRect(wd.hWnd, &rect);
-		ClientToScreen(wd.hWnd, (POINT *)&rect.left);
-		ClientToScreen(wd.hWnd, (POINT *)&rect.right);
-		ClipCursor(&rect);
-	}
 
 	wd.last_pos = p_position;
 	_update_real_mouse_position(p_window);
@@ -1227,15 +1213,6 @@ void DisplayServerWindows::window_set_size(const Size2i p_size, WindowID p_windo
 	}
 
 	MoveWindow(wd.hWnd, rect.left, rect.top, w, h, TRUE);
-
-	// Don't let the mouse leave the window when resizing to a smaller resolution.
-	if (mouse_mode == MOUSE_MODE_CONFINED || mouse_mode == MOUSE_MODE_CONFINED_HIDDEN) {
-		RECT crect;
-		GetClientRect(wd.hWnd, &crect);
-		ClientToScreen(wd.hWnd, (POINT *)&crect.left);
-		ClientToScreen(wd.hWnd, (POINT *)&crect.right);
-		ClipCursor(&crect);
-	}
 }
 
 Size2i DisplayServerWindows::window_get_size(WindowID p_window) const {
@@ -1422,15 +1399,6 @@ void DisplayServerWindows::window_set_mode(WindowMode p_mode, WindowID p_window)
 		if (restore_mouse_trails > 1) {
 			SystemParametersInfoA(SPI_SETMOUSETRAILS, 0, 0, 0);
 		}
-	}
-
-	// Don't let the mouse leave the window when resizing to a smaller resolution.
-	if (mouse_mode == MOUSE_MODE_CONFINED || mouse_mode == MOUSE_MODE_CONFINED_HIDDEN) {
-		RECT crect;
-		GetClientRect(wd.hWnd, &crect);
-		ClientToScreen(wd.hWnd, (POINT *)&crect.left);
-		ClientToScreen(wd.hWnd, (POINT *)&crect.right);
-		ClipCursor(&crect);
 	}
 }
 
@@ -1626,7 +1594,7 @@ Vector2i DisplayServerWindows::ime_get_selection() const {
 	ImmGetCompositionStringW(wd.im_himc, GCS_COMPSTR, string, length);
 
 	int32_t utf32_cursor = 0;
-	for (int32_t i = 0; i < length / sizeof(wchar_t); i++) {
+	for (int32_t i = 0; i < length / int32_t(sizeof(wchar_t)); i++) {
 		if ((string[i] & 0xfffffc00) == 0xd800) {
 			i++;
 		}
@@ -1750,6 +1718,8 @@ DisplayServer::CursorShape DisplayServerWindows::cursor_get_shape() const {
 
 void DisplayServerWindows::cursor_set_custom_image(const Ref<Resource> &p_cursor, CursorShape p_shape, const Vector2 &p_hotspot) {
 	_THREAD_SAFE_METHOD_
+
+	ERR_FAIL_INDEX(p_shape, CURSOR_MAX);
 
 	if (p_cursor.is_valid()) {
 		RBMap<CursorShape, Vector<Variant>>::Element *cursor_c = cursors_cache.find(p_shape);
@@ -2396,8 +2366,23 @@ Rect2i DisplayServerWindows::window_get_popup_safe_rect(WindowID p_window) const
 void DisplayServerWindows::popup_open(WindowID p_window) {
 	_THREAD_SAFE_METHOD_
 
-	const WindowData &wd = windows[p_window];
-	if (wd.is_popup) {
+	bool has_popup_ancestor = false;
+	WindowID transient_root = p_window;
+	while (true) {
+		WindowID parent = windows[transient_root].transient_parent;
+		if (parent == INVALID_WINDOW_ID) {
+			break;
+		} else {
+			transient_root = parent;
+			if (windows[parent].is_popup) {
+				has_popup_ancestor = true;
+				break;
+			}
+		}
+	}
+
+	WindowData &wd = windows[p_window];
+	if (wd.is_popup || has_popup_ancestor) {
 		// Find current popup parent, or root popup if new window is not transient.
 		List<WindowID>::Element *C = nullptr;
 		List<WindowID>::Element *E = popup_list.back();
@@ -3381,6 +3366,15 @@ LRESULT DisplayServerWindows::WndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARA
 					Callable::CallError ce;
 					window.rect_changed_callback.callp(args, 1, ret, ce);
 				}
+
+				// Update cursor clip region after window rect has changed.
+				if (mouse_mode == MOUSE_MODE_CAPTURED || mouse_mode == MOUSE_MODE_CONFINED || mouse_mode == MOUSE_MODE_CONFINED_HIDDEN) {
+					RECT crect;
+					GetClientRect(window.hWnd, &crect);
+					ClientToScreen(window.hWnd, (POINT *)&crect.left);
+					ClientToScreen(window.hWnd, (POINT *)&crect.right);
+					ClipCursor(&crect);
+				}
 			}
 
 			// Return here to prevent WM_MOVE and WM_SIZE from being sent
@@ -3676,10 +3670,18 @@ void DisplayServerWindows::_process_key_events() {
 					}
 
 					k->set_window_id(ke.window_id);
-					k->set_shift_pressed(ke.shift);
-					k->set_alt_pressed(ke.alt);
-					k->set_ctrl_pressed(ke.control);
-					k->set_meta_pressed(ke.meta);
+					if (keycode != Key::SHIFT) {
+						k->set_shift_pressed(ke.shift);
+					}
+					if (keycode != Key::ALT) {
+						k->set_alt_pressed(ke.alt);
+					}
+					if (keycode != Key::CTRL) {
+						k->set_ctrl_pressed(ke.control);
+					}
+					if (keycode != Key::META) {
+						k->set_meta_pressed(ke.meta);
+					}
 					k->set_pressed(true);
 					k->set_keycode(keycode);
 					k->set_physical_keycode(physical_keycode);
@@ -3701,11 +3703,6 @@ void DisplayServerWindows::_process_key_events() {
 				k.instantiate();
 
 				k->set_window_id(ke.window_id);
-				k->set_shift_pressed(ke.shift);
-				k->set_alt_pressed(ke.alt);
-				k->set_ctrl_pressed(ke.control);
-				k->set_meta_pressed(ke.meta);
-
 				k->set_pressed(ke.uMsg == WM_KEYDOWN);
 
 				Key keycode = KeyMappingWindows::get_keysym(ke.wParam);
@@ -3727,6 +3724,18 @@ void DisplayServerWindows::_process_key_events() {
 					}
 				}
 
+				if (keycode != Key::SHIFT) {
+					k->set_shift_pressed(ke.shift);
+				}
+				if (keycode != Key::ALT) {
+					k->set_alt_pressed(ke.alt);
+				}
+				if (keycode != Key::CTRL) {
+					k->set_ctrl_pressed(ke.control);
+				}
+				if (keycode != Key::META) {
+					k->set_meta_pressed(ke.meta);
+				}
 				k->set_keycode(keycode);
 				k->set_physical_keycode(physical_keycode);
 				k->set_key_label(key_label);
@@ -3971,10 +3980,19 @@ DisplayServer::WindowID DisplayServerWindows::_create_window(WindowMode p_mode, 
 
 		wd.im_position = Vector2();
 
-		// FIXME this is wrong in cases where the window coordinates were changed due to full screen mode; use WindowRect
-		wd.last_pos = p_rect.position;
-		wd.width = p_rect.size.width;
-		wd.height = p_rect.size.height;
+		if (p_mode == WINDOW_MODE_FULLSCREEN || p_mode == WINDOW_MODE_EXCLUSIVE_FULLSCREEN || p_mode == WINDOW_MODE_MAXIMIZED) {
+			RECT r;
+			GetClientRect(wd.hWnd, &r);
+			ClientToScreen(wd.hWnd, (POINT *)&r.left);
+			ClientToScreen(wd.hWnd, (POINT *)&r.right);
+			wd.last_pos = Point2i(r.left, r.top) - _get_screens_origin();
+			wd.width = r.right - r.left;
+			wd.height = r.bottom - r.top;
+		} else {
+			wd.last_pos = p_rect.position;
+			wd.width = p_rect.size.width;
+			wd.height = p_rect.size.height;
+		}
 
 		window_id_counter++;
 	}
@@ -4219,7 +4237,7 @@ DisplayServerWindows::DisplayServerWindows(const String &p_rendering_driver, Win
 		window_position = screen_get_position(p_screen) + (screen_get_size(p_screen) - p_resolution) / 2;
 	}
 
-	WindowID main_window = _create_window(p_mode, p_vsync_mode, 0, Rect2i(window_position, p_resolution));
+	WindowID main_window = _create_window(p_mode, p_vsync_mode, p_flags, Rect2i(window_position, p_resolution));
 	ERR_FAIL_COND_MSG(main_window == INVALID_WINDOW_ID, "Failed to create main window.");
 
 	joypad = new JoypadWindows(&windows[MAIN_WINDOW_ID].hWnd);

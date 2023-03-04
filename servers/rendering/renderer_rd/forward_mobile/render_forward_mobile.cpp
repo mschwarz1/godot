@@ -30,6 +30,7 @@
 
 #include "render_forward_mobile.h"
 #include "core/config/project_settings.h"
+#include "core/object/worker_thread_pool.h"
 #include "servers/rendering/renderer_rd/storage_rd/light_storage.h"
 #include "servers/rendering/renderer_rd/storage_rd/mesh_storage.h"
 #include "servers/rendering/renderer_rd/storage_rd/particles_storage.h"
@@ -270,7 +271,12 @@ RID RenderForwardMobile::RenderBufferDataForwardMobile::get_color_fbs(Framebuffe
 			// - add blit to 2D pass
 			RID render_target = render_buffers->get_render_target();
 			ERR_FAIL_COND_V(render_target.is_null(), RID());
-			RID target_buffer = texture_storage->render_target_get_rd_texture(render_target);
+			RID target_buffer;
+			if (texture_storage->render_target_get_msaa(render_target) == RS::VIEWPORT_MSAA_DISABLED) {
+				target_buffer = texture_storage->render_target_get_rd_texture(render_target);
+			} else {
+				target_buffer = texture_storage->render_target_get_rd_texture_msaa(render_target);
+			}
 			ERR_FAIL_COND_V(target_buffer.is_null(), RID());
 
 			int target_buffer_id = textures.size();
@@ -357,10 +363,13 @@ RID RenderForwardMobile::_setup_render_pass_uniform_set(RenderListType p_render_
 	//there should always be enough uniform buffers for render passes, otherwise bugs
 	ERR_FAIL_INDEX_V(p_index, (int)scene_state.uniform_buffers.size(), RID());
 
+	bool is_multiview = false;
+
 	Ref<RenderBufferDataForwardMobile> rb_data;
 	Ref<RenderSceneBuffersRD> rb;
 	if (p_render_data && p_render_data->render_buffers.is_valid()) {
 		rb = p_render_data->render_buffers;
+		is_multiview = rb->get_view_count() > 1;
 		if (rb->has_custom_data(RB_SCOPE_MOBILE)) {
 			// Our forward mobile custom data buffer will only be available when we're rendering our normal view.
 			// This will not be available when rendering reflection probes.
@@ -494,6 +503,8 @@ RID RenderForwardMobile::_setup_render_pass_uniform_set(RenderListType p_render_
 		RID texture;
 		if (rb.is_valid() && rb->has_texture(RB_SCOPE_BUFFERS, RB_TEX_BACK_DEPTH)) {
 			texture = rb->get_texture(RB_SCOPE_BUFFERS, RB_TEX_BACK_DEPTH);
+		} else if (is_multiview) {
+			texture = texture_storage->texture_rd_get_default(RendererRD::TextureStorage::DEFAULT_RD_TEXTURE_2D_ARRAY_DEPTH);
 		} else {
 			texture = texture_storage->texture_rd_get_default(RendererRD::TextureStorage::DEFAULT_RD_TEXTURE_DEPTH);
 		}
@@ -504,8 +515,14 @@ RID RenderForwardMobile::_setup_render_pass_uniform_set(RenderListType p_render_
 		RD::Uniform u;
 		u.binding = 10;
 		u.uniform_type = RD::UNIFORM_TYPE_TEXTURE;
-		RID bbt = rb_data.is_valid() ? rb->get_back_buffer_texture() : RID();
-		RID texture = bbt.is_valid() ? bbt : texture_storage->texture_rd_get_default(RendererRD::TextureStorage::DEFAULT_RD_TEXTURE_BLACK);
+		RID texture = rb_data.is_valid() ? rb->get_back_buffer_texture() : RID();
+		if (texture.is_null()) {
+			if (is_multiview) {
+				texture = texture_storage->texture_rd_get_default(RendererRD::TextureStorage::DEFAULT_RD_TEXTURE_2D_ARRAY_DEPTH);
+			} else {
+				texture = texture_storage->texture_rd_get_default(RendererRD::TextureStorage::DEFAULT_RD_TEXTURE_BLACK);
+			}
+		}
 		u.append_id(texture);
 		uniforms.push_back(u);
 	}
@@ -593,12 +610,10 @@ void RenderForwardMobile::_pre_opaque_render(RenderDataRD *p_render_data) {
 
 	bool render_shadows = p_render_data->directional_shadows.size() || p_render_data->shadows.size();
 
-	if (render_shadows) {
-		RENDER_TIMESTAMP("Render Shadows");
-	}
-
 	//prepare shadow rendering
 	if (render_shadows) {
+		RENDER_TIMESTAMP("Render Shadows");
+
 		_render_shadow_begin();
 
 		//render directional shadows
@@ -640,16 +655,18 @@ void RenderForwardMobile::_pre_opaque_render(RenderDataRD *p_render_data) {
 void RenderForwardMobile::_render_scene(RenderDataRD *p_render_data, const Color &p_default_bg_color) {
 	RendererRD::LightStorage *light_storage = RendererRD::LightStorage::get_singleton();
 
-	Ref<RenderSceneBuffersRD> rb;
+	ERR_FAIL_NULL(p_render_data);
+
+	Ref<RenderSceneBuffersRD> rb = p_render_data->render_buffers;
+	ERR_FAIL_COND(rb.is_null());
+
 	Ref<RenderBufferDataForwardMobile> rb_data;
-	if (p_render_data->render_buffers.is_valid()) {
-		rb = p_render_data->render_buffers;
-		if (rb->has_custom_data(RB_SCOPE_MOBILE)) {
-			// Our forward mobile custom data buffer will only be available when we're rendering our normal view.
-			// This will not be available when rendering reflection probes.
-			rb_data = rb->get_custom_data(RB_SCOPE_MOBILE);
-		}
+	if (rb->has_custom_data(RB_SCOPE_MOBILE)) {
+		// Our forward mobile custom data buffer will only be available when we're rendering our normal view.
+		// This will not be available when rendering reflection probes.
+		rb_data = rb->get_custom_data(RB_SCOPE_MOBILE);
 	}
+	bool is_reflection_probe = p_render_data->reflection_probe.is_valid();
 
 	RENDER_TIMESTAMP("Prepare 3D Scene");
 
@@ -697,7 +714,7 @@ void RenderForwardMobile::_render_scene(RenderDataRD *p_render_data, const Color
 		p_render_data->render_info->info[RS::VIEWPORT_RENDER_INFO_TYPE_VISIBLE][RS::VIEWPORT_RENDER_INFO_OBJECTS_IN_FRAME] = p_render_data->instances->size();
 	}
 
-	if (p_render_data->reflection_probe.is_valid()) {
+	if (is_reflection_probe) {
 		uint32_t resolution = light_storage->reflection_probe_instance_get_resolution(p_render_data->reflection_probe);
 		screen_size.x = resolution;
 		screen_size.y = resolution;
@@ -730,14 +747,15 @@ void RenderForwardMobile::_render_scene(RenderDataRD *p_render_data, const Color
 		}
 
 		// We do this last because our get_color_fbs creates and caches the framebuffer if we need it.
-		if (using_subpass_post_process && rb_data->get_color_fbs(RenderBufferDataForwardMobile::FB_CONFIG_FOUR_SUBPASSES).is_null()) {
+		RID four_subpasses = rb_data->get_color_fbs(RenderBufferDataForwardMobile::FB_CONFIG_FOUR_SUBPASSES);
+		if (using_subpass_post_process && four_subpasses.is_null()) {
 			// can't do blit subpass because we don't have all subpasses
 			using_subpass_post_process = false;
 		}
 
 		if (using_subpass_post_process) {
 			// all as subpasses
-			framebuffer = rb_data->get_color_fbs(RenderBufferDataForwardMobile::FB_CONFIG_FOUR_SUBPASSES);
+			framebuffer = four_subpasses;
 		} else if (using_subpass_transparent) {
 			// our tonemap pass is separate
 			framebuffer = rb_data->get_color_fbs(RenderBufferDataForwardMobile::FB_CONFIG_THREE_SUBPASSES);
@@ -754,7 +772,7 @@ void RenderForwardMobile::_render_scene(RenderDataRD *p_render_data, const Color
 	RD::get_singleton()->draw_command_begin_label("Render Setup");
 
 	_setup_lightmaps(p_render_data, *p_render_data->lightmaps, p_render_data->scene_data->cam_transform);
-	_setup_environment(p_render_data, p_render_data->reflection_probe.is_valid(), screen_size, !p_render_data->reflection_probe.is_valid(), p_default_bg_color, false);
+	_setup_environment(p_render_data, is_reflection_probe, screen_size, !is_reflection_probe, p_default_bg_color, false);
 
 	_update_render_base_uniform_set(); //may have changed due to the above (light buffer enlarged, as an example)
 
@@ -832,7 +850,7 @@ void RenderForwardMobile::_render_scene(RenderDataRD *p_render_data, const Color
 			RD::get_singleton()->draw_command_begin_label("Setup Sky");
 
 			// Setup our sky render information for this frame/viewport
-			if (p_render_data->reflection_probe.is_valid()) {
+			if (is_reflection_probe) {
 				Vector3 eye_offset;
 				Projection correction;
 				correction.set_depth_correction(true);
@@ -896,7 +914,7 @@ void RenderForwardMobile::_render_scene(RenderDataRD *p_render_data, const Color
 
 		p_render_data->scene_data->directional_light_count = p_render_data->directional_light_count;
 
-		_setup_environment(p_render_data, p_render_data->reflection_probe.is_valid(), screen_size, !p_render_data->reflection_probe.is_valid(), p_default_bg_color, p_render_data->render_buffers.is_valid());
+		_setup_environment(p_render_data, is_reflection_probe, screen_size, !is_reflection_probe, p_default_bg_color, p_render_data->render_buffers.is_valid());
 
 		if (using_subpass_transparent && using_subpass_post_process) {
 			RENDER_TIMESTAMP("Render Opaque + Transparent + Tonemap");
@@ -1025,7 +1043,7 @@ void RenderForwardMobile::_render_scene(RenderDataRD *p_render_data, const Color
 			}
 
 			// this may be needed if we re-introduced steps that change info, not sure which do so in the previous implementation
-			// _setup_environment(p_render_data, p_render_data->reflection_probe.is_valid(), screen_size, !p_render_data->reflection_probe.is_valid(), p_default_bg_color, false);
+			// _setup_environment(p_render_data, is_reflection_probe, screen_size, !is_reflection_probe, p_default_bg_color, false);
 
 			RD::FramebufferFormatID fb_format = RD::get_singleton()->framebuffer_get_format(framebuffer);
 			RenderListParameters render_list_params(render_list[RENDER_LIST_ALPHA].elements.ptr(), render_list[RENDER_LIST_ALPHA].element_info.ptr(), render_list[RENDER_LIST_ALPHA].elements.size(), reverse_cull, PASS_MODE_COLOR, rp_uniform_set, spec_constant_base_flags, get_debug_draw_mode() == RS::VIEWPORT_DEBUG_DRAW_WIREFRAME, Vector2(), p_render_data->scene_data->lod_distance_multiplier, p_render_data->scene_data->screen_mesh_lod_threshold, p_render_data->scene_data->view_count);
@@ -1065,9 +1083,7 @@ void RenderForwardMobile::_render_scene(RenderDataRD *p_render_data, const Color
 		_disable_clear_request(p_render_data);
 	}
 
-	if (rb.is_valid()) {
-		_render_buffers_debug_draw(rb, p_render_data->shadow_atlas, p_render_data->occluder_debug_tex);
-	}
+	_render_buffers_debug_draw(rb, p_render_data->shadow_atlas, p_render_data->occluder_debug_tex);
 }
 
 /* these are being called from RendererSceneRenderRD::_pre_opaque_render */
@@ -1924,7 +1940,6 @@ void RenderForwardMobile::_fill_render_list(RenderListType p_render_list, const 
 }
 
 void RenderForwardMobile::_setup_environment(const RenderDataRD *p_render_data, bool p_no_fog, const Size2i &p_screen_size, bool p_flip_y, const Color &p_default_bg_color, bool p_opaque_render_buffers, bool p_pancake_shadows, int p_index) {
-	Ref<RenderSceneBuffersRD> rd = p_render_data->render_buffers;
 	RID env = is_environment(p_render_data->environment) ? p_render_data->environment : RID();
 	RID reflection_probe_instance = p_render_data->reflection_probe.is_valid() ? RendererRD::LightStorage::get_singleton()->reflection_probe_instance_get_probe(p_render_data->reflection_probe) : RID();
 

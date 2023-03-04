@@ -89,7 +89,6 @@ class GLTFState : public Resource {
 	HashSet<String> unique_animation_names;
 
 	Vector<Ref<GLTFSkeleton>> skeletons;
-	HashMap<GLTFSkeletonIndex, GLTFNodeIndex> skeleton_to_node;
 	Vector<Ref<GLTFAnimation>> animations;
 	HashMap<GLTFNodeIndex, Node *> scene_nodes;
 	HashMap<GLTFNodeIndex, ImporterMeshInstance3D *> scene_mesh_instances;
@@ -108,6 +107,7 @@ public:
 		HANDLE_BINARY_DISCARD_TEXTURES = 0,
 		HANDLE_BINARY_EXTRACT_TEXTURES,
 		HANDLE_BINARY_EMBED_AS_BASISU,
+		HANDLE_BINARY_EMBED_AS_UNCOMPRESSED, // if this value changes from 3, ResourceImporterScene::pre_import must be changed as well.
 	};
 	int32_t get_handle_binary_image() {
 		return handle_binary_image;
@@ -196,9 +196,6 @@ public:
 
 	TypedArray<GLTFSkeleton> get_skeletons();
 	void set_skeletons(TypedArray<GLTFSkeleton> p_skeletons);
-
-	Dictionary get_skeleton_to_node();
-	void set_skeleton_to_node(Dictionary p_skeleton_to_node);
 
 	bool get_create_animations();
 	void set_create_animations(bool p_create_animations);

@@ -47,15 +47,15 @@ void EditorSceneFormatImporterGLTF::get_extensions(List<String> *r_extensions) c
 Node *EditorSceneFormatImporterGLTF::import_scene(const String &p_path, uint32_t p_flags,
 		const HashMap<StringName, Variant> &p_options,
 		List<String> *r_missing_deps, Error *r_err) {
-	Ref<GLTFDocument> doc;
-	doc.instantiate();
+	Ref<GLTFDocument> gltf;
+	gltf.instantiate();
 	Ref<GLTFState> state;
 	state.instantiate();
-	if (p_options.has("meshes/handle_gltf_embedded_images")) {
-		int32_t enum_option = p_options["meshes/handle_gltf_embedded_images"];
+	if (p_options.has("gltf/embedded_image_handling")) {
+		int32_t enum_option = p_options["gltf/embedded_image_handling"];
 		state->set_handle_binary_image(enum_option);
 	}
-	Error err = doc->append_from_file(p_path, state, p_flags);
+	Error err = gltf->append_from_file(p_path, state, p_flags);
 	if (err != OK) {
 		if (r_err) {
 			*r_err = err;
@@ -66,16 +66,18 @@ Node *EditorSceneFormatImporterGLTF::import_scene(const String &p_path, uint32_t
 		state->set_create_animations(bool(p_options["animation/import"]));
 	}
 
-	if (p_options.has("animation/trimming")) {
-		return doc->generate_scene(state, (float)p_options["animation/fps"], (bool)p_options["animation/trimming"]);
-	} else {
-		return doc->generate_scene(state, (float)p_options["animation/fps"], false);
-	}
+#ifndef DISABLE_DEPRECATED
+	bool trimming = p_options.has("animation/trimming") ? (bool)p_options["animation/trimming"] : false;
+	bool remove_immutable = p_options.has("animation/remove_immutable_tracks") ? (bool)p_options["animation/remove_immutable_tracks"] : true;
+	return gltf->generate_scene(state, (float)p_options["animation/fps"], trimming, remove_immutable);
+#else
+	return gltf->generate_scene(state, (float)p_options["animation/fps"], (bool)p_options["animation/trimming"], (bool)p_options["animation/remove_immutable_tracks"]);
+#endif
 }
 
 void EditorSceneFormatImporterGLTF::get_import_options(const String &p_path,
 		List<ResourceImporter::ImportOption> *r_options) {
-	r_options->push_back(ResourceImporterScene::ImportOption(PropertyInfo(Variant::INT, "meshes/handle_gltf_embedded_images", PROPERTY_HINT_ENUM, "Discard All Textures,Extract Textures,Embed As Basis Universal", PROPERTY_USAGE_DEFAULT | PROPERTY_USAGE_UPDATE_ALL_IF_MODIFIED), GLTFState::HANDLE_BINARY_EXTRACT_TEXTURES));
+	r_options->push_back(ResourceImporterScene::ImportOption(PropertyInfo(Variant::INT, "gltf/embedded_image_handling", PROPERTY_HINT_ENUM, "Discard All Textures,Extract Textures,Embed As Basis Universal,Embed as Uncompressed", PROPERTY_USAGE_DEFAULT | PROPERTY_USAGE_UPDATE_ALL_IF_MODIFIED), GLTFState::HANDLE_BINARY_EXTRACT_TEXTURES));
 }
 
 #endif // TOOLS_ENABLED

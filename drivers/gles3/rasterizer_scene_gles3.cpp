@@ -731,6 +731,11 @@ void RasterizerSceneGLES3::_setup_sky(const RenderDataGLES3 *p_render_data, cons
 			}
 		}
 
+		if (p_render_data->view_count > 1) {
+			glBindBufferBase(GL_UNIFORM_BUFFER, SKY_MULTIVIEW_UNIFORM_LOCATION, scene_state.multiview_buffer);
+			glBindBuffer(GL_UNIFORM_BUFFER, 0);
+		}
+
 		if (!sky->radiance) {
 			_invalidate_sky(sky);
 			_update_dirty_skys();
@@ -738,7 +743,7 @@ void RasterizerSceneGLES3::_setup_sky(const RenderDataGLES3 *p_render_data, cons
 	}
 }
 
-void RasterizerSceneGLES3::_draw_sky(RID p_env, const Projection &p_projection, const Transform3D &p_transform, float p_luminance_multiplier) {
+void RasterizerSceneGLES3::_draw_sky(RID p_env, const Projection &p_projection, const Transform3D &p_transform, float p_luminance_multiplier, bool p_use_multiview, bool p_flip_y) {
 	GLES3::MaterialStorage *material_storage = GLES3::MaterialStorage::get_singleton();
 	ERR_FAIL_COND(p_env.is_null());
 
@@ -747,6 +752,11 @@ void RasterizerSceneGLES3::_draw_sky(RID p_env, const Projection &p_projection, 
 
 	GLES3::SkyMaterialData *material_data = nullptr;
 	RID sky_material;
+
+	uint64_t spec_constants = p_use_multiview ? SkyShaderGLES3::USE_MULTIVIEW : 0;
+	if (p_flip_y) {
+		spec_constants |= SkyShaderGLES3::USE_INVERTED_Y;
+	}
 
 	RS::EnvironmentBG background = environment_get_background(p_env);
 
@@ -792,16 +802,21 @@ void RasterizerSceneGLES3::_draw_sky(RID p_env, const Projection &p_projection, 
 	sky_transform.invert();
 	sky_transform = sky_transform * p_transform.basis;
 
-	bool success = material_storage->shaders.sky_shader.version_bind_shader(shader_data->version, SkyShaderGLES3::MODE_BACKGROUND);
+	bool success = material_storage->shaders.sky_shader.version_bind_shader(shader_data->version, SkyShaderGLES3::MODE_BACKGROUND, spec_constants);
 	if (!success) {
 		return;
 	}
 
-	material_storage->shaders.sky_shader.version_set_uniform(SkyShaderGLES3::ORIENTATION, sky_transform, shader_data->version, SkyShaderGLES3::MODE_BACKGROUND);
-	material_storage->shaders.sky_shader.version_set_uniform(SkyShaderGLES3::PROJECTION, camera.columns[2][0], camera.columns[0][0], camera.columns[2][1], camera.columns[1][1], shader_data->version, SkyShaderGLES3::MODE_BACKGROUND);
-	material_storage->shaders.sky_shader.version_set_uniform(SkyShaderGLES3::POSITION, p_transform.origin, shader_data->version, SkyShaderGLES3::MODE_BACKGROUND);
-	material_storage->shaders.sky_shader.version_set_uniform(SkyShaderGLES3::TIME, time, shader_data->version, SkyShaderGLES3::MODE_BACKGROUND);
-	material_storage->shaders.sky_shader.version_set_uniform(SkyShaderGLES3::LUMINANCE_MULTIPLIER, p_luminance_multiplier, shader_data->version, SkyShaderGLES3::MODE_BACKGROUND);
+	material_storage->shaders.sky_shader.version_set_uniform(SkyShaderGLES3::ORIENTATION, sky_transform, shader_data->version, SkyShaderGLES3::MODE_BACKGROUND, spec_constants);
+	material_storage->shaders.sky_shader.version_set_uniform(SkyShaderGLES3::PROJECTION, camera.columns[2][0], camera.columns[0][0], camera.columns[2][1], camera.columns[1][1], shader_data->version, SkyShaderGLES3::MODE_BACKGROUND, spec_constants);
+	material_storage->shaders.sky_shader.version_set_uniform(SkyShaderGLES3::POSITION, p_transform.origin, shader_data->version, SkyShaderGLES3::MODE_BACKGROUND, spec_constants);
+	material_storage->shaders.sky_shader.version_set_uniform(SkyShaderGLES3::TIME, time, shader_data->version, SkyShaderGLES3::MODE_BACKGROUND, spec_constants);
+	material_storage->shaders.sky_shader.version_set_uniform(SkyShaderGLES3::LUMINANCE_MULTIPLIER, p_luminance_multiplier, shader_data->version, SkyShaderGLES3::MODE_BACKGROUND, spec_constants);
+
+	if (p_use_multiview) {
+		glBindBufferBase(GL_UNIFORM_BUFFER, SKY_MULTIVIEW_UNIFORM_LOCATION, scene_state.multiview_buffer);
+		glBindBuffer(GL_UNIFORM_BUFFER, 0);
+	}
 
 	glBindVertexArray(sky_globals.screen_triangle_array);
 	glDrawArrays(GL_TRIANGLES, 0, 3);
@@ -1880,6 +1895,10 @@ void RasterizerSceneGLES3::render_scene(const Ref<RenderSceneBuffers> &p_render_
 	glBindFramebuffer(GL_FRAMEBUFFER, rt->fbo);
 	glViewport(0, 0, rb->width, rb->height);
 
+	glCullFace(GL_BACK);
+	glEnable(GL_CULL_FACE);
+	scene_state.cull_mode = GLES3::SceneShaderData::CULL_BACK;
+
 	// Do depth prepass if it's explicitly enabled
 	bool use_depth_prepass = config->use_depth_prepass;
 
@@ -1895,9 +1914,6 @@ void RasterizerSceneGLES3::render_scene(const Ref<RenderSceneBuffers> &p_render_
 		glEnable(GL_DEPTH_TEST);
 		glDepthFunc(GL_LEQUAL);
 		glDisable(GL_SCISSOR_TEST);
-		glCullFace(GL_BACK);
-		glEnable(GL_CULL_FACE);
-		scene_state.cull_mode = GLES3::SceneShaderData::CULL_BACK;
 
 		glColorMask(0, 0, 0, 0);
 		glClearDepth(1.0f);
@@ -1975,7 +1991,7 @@ void RasterizerSceneGLES3::render_scene(const Ref<RenderSceneBuffers> &p_render_
 		scene_state.current_depth_draw = GLES3::SceneShaderData::DEPTH_DRAW_DISABLED;
 		scene_state.cull_mode = GLES3::SceneShaderData::CULL_BACK;
 
-		_draw_sky(render_data.environment, render_data.cam_projection, render_data.cam_transform, sky_energy_multiplier);
+		_draw_sky(render_data.environment, render_data.cam_projection, render_data.cam_transform, sky_energy_multiplier, p_camera_data->view_count > 1, flip_y);
 	}
 
 	RENDER_TIMESTAMP("Render 3D Transparent Pass");
@@ -2190,6 +2206,9 @@ void RasterizerSceneGLES3::_render_list_template(RenderListParameters *p_params,
 		}
 
 		RS::PrimitiveType primitive = surf->primitive;
+		if (shader->uses_point_size) {
+			primitive = RS::PRIMITIVE_POINTS;
+		}
 		static const GLenum prim[5] = { GL_POINTS, GL_LINES, GL_LINE_STRIP, GL_TRIANGLES, GL_TRIANGLE_STRIP };
 		GLenum primitive_gl = prim[int(primitive)];
 

@@ -137,6 +137,7 @@ Vector<Ref<Texture2D>> EditorInterface::make_mesh_previews(const Vector<Ref<Mesh
 		RS::get_singleton()->instance_set_transform(light_instance2, xform * Transform3D().looking_at(Vector3(+1, -1, -2), Vector3(0, 1, 0)));
 
 		ep.step(TTR("Thumbnail..."), i);
+		DisplayServer::get_singleton()->process_events();
 		Main::iteration();
 		Main::iteration();
 		Ref<Image> img = RS::get_singleton()->texture_2d_get(viewport_texture);
@@ -662,11 +663,7 @@ void EditorPlugin::make_visible(bool p_visible) {
 }
 
 void EditorPlugin::edit(Object *p_object) {
-	if (Object::cast_to<Resource>(p_object)) {
-		GDVIRTUAL_CALL(_edit, Ref<Resource>(Object::cast_to<Resource>(p_object)));
-	} else {
-		GDVIRTUAL_CALL(_edit, p_object);
-	}
+	GDVIRTUAL_CALL(_edit, p_object);
 }
 
 bool EditorPlugin::handles(Object *p_object) const {

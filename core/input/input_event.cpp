@@ -34,7 +34,7 @@
 #include "core/input/shortcut.h"
 #include "core/os/keyboard.h"
 
-const int InputEvent::DEVICE_ID_TOUCH_MOUSE = -1;
+const int InputEvent::DEVICE_ID_EMULATION = -1;
 const int InputEvent::DEVICE_ID_INTERNAL = -2;
 
 void InputEvent::set_device(int p_device) {
@@ -474,10 +474,15 @@ String InputEventKey::to_string() {
 	return vformat("InputEventKey: keycode=%s, mods=%s, physical=%s, pressed=%s, echo=%s", kc, mods, physical, p, e);
 }
 
-Ref<InputEventKey> InputEventKey::create_reference(Key p_keycode) {
+Ref<InputEventKey> InputEventKey::create_reference(Key p_keycode, bool p_physical) {
 	Ref<InputEventKey> ie;
 	ie.instantiate();
-	ie->set_keycode(p_keycode & KeyModifierMask::CODE_MASK);
+	if (p_physical) {
+		ie->set_physical_keycode(p_keycode & KeyModifierMask::CODE_MASK);
+	} else {
+		ie->set_keycode(p_keycode & KeyModifierMask::CODE_MASK);
+	}
+
 	ie->set_unicode(char32_t(p_keycode & KeyModifierMask::CODE_MASK));
 
 	if ((p_keycode & KeyModifierMask::SHIFT) != Key::NONE) {
@@ -1186,14 +1191,14 @@ static const char *_joy_button_descriptions[(size_t)JoyButton::SDL_MAX] = {
 };
 
 String InputEventJoypadButton::as_text() const {
-	String text = "Joypad Button " + itos((int64_t)button_index);
+	String text = vformat(RTR("Joypad Button %d"), (int64_t)button_index);
 
 	if (button_index > JoyButton::INVALID && button_index < JoyButton::SDL_MAX) {
-		text += vformat(" (%s)", _joy_button_descriptions[(size_t)button_index]);
+		text += vformat(" (%s)", TTRGET(_joy_button_descriptions[(size_t)button_index]));
 	}
 
 	if (pressure != 0) {
-		text += ", Pressure:" + String(Variant(pressure));
+		text += ", " + RTR("Pressure:") + " " + String(Variant(pressure));
 	}
 
 	return text;

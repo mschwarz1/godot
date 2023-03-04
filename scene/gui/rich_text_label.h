@@ -31,6 +31,7 @@
 #ifndef RICH_TEXT_LABEL_H
 #define RICH_TEXT_LABEL_H
 
+#include "core/object/worker_thread_pool.h"
 #include "rich_text_effect.h"
 #include "scene/gui/popup_menu.h"
 #include "scene/gui/scroll_bar.h"
@@ -80,6 +81,7 @@ public:
 	enum MenuItems {
 		MENU_COPY,
 		MENU_SELECT_ALL,
+		MENU_MAX
 	};
 
 	enum DefaultFont {
@@ -369,7 +371,7 @@ private:
 	Item *current = nullptr;
 	ItemFrame *current_frame = nullptr;
 
-	Thread thread;
+	WorkerThreadPool::TaskID task = WorkerThreadPool::INVALID_TASK_ID;
 	Mutex data_mutex;
 	bool threaded = false;
 	std::atomic<bool> stop_thread;
@@ -409,7 +411,8 @@ private:
 
 	void _invalidate_current_line(ItemFrame *p_frame);
 
-	static void _thread_function(void *self);
+	void _thread_function(void *p_userdata);
+	void _thread_end();
 	void _stop_thread();
 	bool _validate_line_caches();
 	void _process_line_caches();
@@ -452,8 +455,8 @@ private:
 	// Context menu.
 	PopupMenu *menu = nullptr;
 	void _generate_context_menu();
+	void _update_context_menu();
 	Key _get_menu_action_accelerator(const String &p_action);
-	void _menu_option(int p_option);
 
 	int visible_characters = -1;
 	float visible_ratio = 1.0;
@@ -686,6 +689,7 @@ public:
 	// Context menu.
 	PopupMenu *get_menu() const;
 	bool is_menu_visible() const;
+	void menu_option(int p_option);
 
 	void parse_bbcode(const String &p_bbcode);
 	void append_text(const String &p_bbcode);
@@ -736,6 +740,6 @@ public:
 };
 
 VARIANT_ENUM_CAST(RichTextLabel::ListType);
-VARIANT_ENUM_CAST(RichTextLabel::ItemType);
+VARIANT_ENUM_CAST(RichTextLabel::MenuItems);
 
 #endif // RICH_TEXT_LABEL_H

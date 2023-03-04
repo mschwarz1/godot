@@ -3499,7 +3499,7 @@ bool Variant::identity_compare(const Variant &p_variant) const {
 
 	switch (type) {
 		case OBJECT: {
-			return _get_obj().obj == p_variant._get_obj().obj;
+			return _get_obj().id == p_variant._get_obj().id;
 		} break;
 
 		case DICTIONARY: {
@@ -3601,15 +3601,6 @@ bool Variant::is_type_shared(Variant::Type p_type) {
 		case OBJECT:
 		case ARRAY:
 		case DICTIONARY:
-		case PACKED_BYTE_ARRAY:
-		case PACKED_INT32_ARRAY:
-		case PACKED_INT64_ARRAY:
-		case PACKED_FLOAT32_ARRAY:
-		case PACKED_FLOAT64_ARRAY:
-		case PACKED_STRING_ARRAY:
-		case PACKED_VECTOR2_ARRAY:
-		case PACKED_VECTOR3_ARRAY:
-		case PACKED_COLOR_ARRAY:
 			return true;
 		default: {
 		}

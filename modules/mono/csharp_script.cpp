@@ -92,11 +92,6 @@ String CSharpLanguage::get_extension() const {
 	return "cs";
 }
 
-Error CSharpLanguage::execute_file(const String &p_path) {
-	// ??
-	return OK;
-}
-
 void CSharpLanguage::init() {
 #ifdef DEBUG_METHODS_ENABLED
 	if (OS::get_singleton()->get_cmdline_args().find("--class-db-json")) {
@@ -594,7 +589,7 @@ Vector<ScriptLanguage::StackInfo> CSharpLanguage::debug_get_current_stack_info()
 		_recursion_flag_ = false;
 	};
 
-	if (!gdmono->is_runtime_initialized()) {
+	if (!gdmono || !gdmono->is_runtime_initialized()) {
 		return Vector<StackInfo>();
 	}
 
@@ -684,6 +679,7 @@ void CSharpLanguage::reload_tool_script(const Ref<Script> &p_script, bool p_soft
 
 #ifdef GD_MONO_HOT_RELOAD
 bool CSharpLanguage::is_assembly_reloading_needed() {
+	ERR_FAIL_NULL_V(gdmono, false);
 	if (!gdmono->is_runtime_initialized()) {
 		return false;
 	}
@@ -718,6 +714,7 @@ bool CSharpLanguage::is_assembly_reloading_needed() {
 }
 
 void CSharpLanguage::reload_assemblies(bool p_soft_reload) {
+	ERR_FAIL_NULL(gdmono);
 	if (!gdmono->is_runtime_initialized()) {
 		return;
 	}
@@ -1147,6 +1144,7 @@ void CSharpLanguage::_editor_init_callback() {
 	// Add plugin to EditorNode and enable it
 	EditorNode::add_editor_plugin(godotsharp_editor);
 	ED_SHORTCUT("mono/build_solution", TTR("Build Solution"), KeyModifierMask::ALT | Key::B);
+	ED_SHORTCUT_OVERRIDE("mono/build_solution", "macos", KeyModifierMask::META | KeyModifierMask::CTRL | Key::B);
 	godotsharp_editor->enable_plugin();
 
 	get_singleton()->godotsharp_editor = godotsharp_editor;

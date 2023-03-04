@@ -673,9 +673,8 @@ Error OS_Windows::execute(const String &p_path, const List<String> &p_arguments,
 		}
 
 		CloseHandle(pipe[0]); // Close pipe read handle.
-	} else {
-		WaitForSingleObject(pi.pi.hProcess, INFINITE);
 	}
+	WaitForSingleObject(pi.pi.hProcess, INFINITE);
 
 	if (r_exitcode) {
 		DWORD ret2;
@@ -830,7 +829,7 @@ class FallbackTextAnalysisSource : public IDWriteTextAnalysisSource {
 	IDWriteNumberSubstitution *n_sub = nullptr;
 
 public:
-	HRESULT STDMETHODCALLTYPE QueryInterface(REFIID riid, VOID **ppvInterface) {
+	HRESULT STDMETHODCALLTYPE QueryInterface(REFIID riid, VOID **ppvInterface) override {
 		if (IID_IUnknown == riid) {
 			AddRef();
 			*ppvInterface = (IUnknown *)this;
@@ -844,11 +843,11 @@ public:
 		return S_OK;
 	}
 
-	ULONG STDMETHODCALLTYPE AddRef() {
+	ULONG STDMETHODCALLTYPE AddRef() override {
 		return InterlockedIncrement(&_cRef);
 	}
 
-	ULONG STDMETHODCALLTYPE Release() {
+	ULONG STDMETHODCALLTYPE Release() override {
 		ULONG ulRef = InterlockedDecrement(&_cRef);
 		if (0 == ulRef) {
 			delete this;

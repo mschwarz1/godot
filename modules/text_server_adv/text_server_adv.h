@@ -158,7 +158,10 @@ class TextServerAdvanced : public TextServerExtension {
 
 	// ICU support data.
 
-	bool icu_data_loaded = false;
+	static bool icu_data_loaded;
+	mutable USet *allowed = nullptr;
+	mutable USpoofChecker *sc_spoof = nullptr;
+	mutable USpoofChecker *sc_conf = nullptr;
 
 	// Font cache data.
 
@@ -466,7 +469,7 @@ class TextServerAdvanced : public TextServerExtension {
 			int pos = 0;
 			InlineAlignment inline_align = INLINE_ALIGNMENT_CENTER;
 			Rect2 rect;
-			float baseline = 0;
+			double baseline = 0;
 		};
 		HashMap<Variant, EmbeddedObject, VariantHasher, VariantComparator> objects;
 
@@ -612,6 +615,8 @@ class TextServerAdvanced : public TextServerExtension {
 	Glyph _shape_single_glyph(ShapedTextDataAdvanced *p_sd, char32_t p_char, hb_script_t p_script, hb_direction_t p_direction, const RID &p_font, int64_t p_font_size);
 
 	_FORCE_INLINE_ void _add_featuers(const Dictionary &p_source, Vector<hb_feature_t> &r_ftrs);
+
+	Mutex ft_mutex;
 
 	// HarfBuzz bitmap font interface.
 
@@ -868,8 +873,8 @@ public:
 	MODBIND2RC(int64_t, shaped_text_get_spacing, const RID &, SpacingType);
 
 	MODBIND7R(bool, shaped_text_add_string, const RID &, const String &, const TypedArray<RID> &, int64_t, const Dictionary &, const String &, const Variant &);
-	MODBIND6R(bool, shaped_text_add_object, const RID &, const Variant &, const Size2 &, InlineAlignment, int64_t, float);
-	MODBIND5R(bool, shaped_text_resize_object, const RID &, const Variant &, const Size2 &, InlineAlignment, float);
+	MODBIND6R(bool, shaped_text_add_object, const RID &, const Variant &, const Size2 &, InlineAlignment, int64_t, double);
+	MODBIND5R(bool, shaped_text_resize_object, const RID &, const Variant &, const Size2 &, InlineAlignment, double);
 
 	MODBIND1RC(int64_t, shaped_get_span_count, const RID &);
 	MODBIND2RC(Variant, shaped_get_span_meta, const RID &, int64_t);
@@ -914,7 +919,7 @@ public:
 	MODBIND2RC(String, parse_number, const String &, const String &);
 	MODBIND1RC(String, percent_sign, const String &);
 
-	MODBIND3RC(PackedInt32Array, string_get_word_breaks, const String &, const String &, int);
+	MODBIND3RC(PackedInt32Array, string_get_word_breaks, const String &, const String &, int64_t);
 
 	MODBIND2RC(int64_t, is_confusable, const String &, const PackedStringArray &);
 	MODBIND1RC(bool, spoof_check, const String &);

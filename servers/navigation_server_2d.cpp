@@ -152,14 +152,15 @@ void NavigationServer2D::_emit_map_changed(RID p_map) {
 	emit_signal(SNAME("map_changed"), p_map);
 }
 
-#ifdef DEBUG_ENABLED
 void NavigationServer2D::set_debug_enabled(bool p_enabled) {
 	NavigationServer3D::get_singleton()->set_debug_enabled(p_enabled);
 }
+
 bool NavigationServer2D::get_debug_enabled() const {
 	return NavigationServer3D::get_singleton()->get_debug_enabled();
 }
 
+#ifdef DEBUG_ENABLED
 void NavigationServer2D::set_debug_navigation_edge_connection_color(const Color &p_color) {
 	NavigationServer3D::get_singleton()->set_debug_navigation_edge_connection_color(p_color);
 }
@@ -200,12 +201,68 @@ Color NavigationServer2D::get_debug_navigation_link_connection_disabled_color() 
 	return NavigationServer3D::get_singleton()->get_debug_navigation_link_connection_disabled_color();
 }
 
+void NavigationServer2D::set_debug_navigation_geometry_edge_color(const Color &p_color) {
+	NavigationServer3D::get_singleton()->set_debug_navigation_geometry_edge_color(p_color);
+}
+
+Color NavigationServer2D::get_debug_navigation_geometry_edge_color() const {
+	return NavigationServer3D::get_singleton()->get_debug_navigation_geometry_edge_color();
+}
+
+void NavigationServer2D::set_debug_navigation_geometry_edge_disabled_color(const Color &p_color) {
+	NavigationServer3D::get_singleton()->set_debug_navigation_geometry_edge_disabled_color(p_color);
+}
+
+Color NavigationServer2D::get_debug_navigation_geometry_edge_disabled_color() const {
+	return NavigationServer3D::get_singleton()->get_debug_navigation_geometry_edge_disabled_color();
+}
+
 void NavigationServer2D::set_debug_navigation_enable_edge_connections(const bool p_value) {
 	NavigationServer3D::get_singleton()->set_debug_navigation_enable_edge_connections(p_value);
 }
 
 bool NavigationServer2D::get_debug_navigation_enable_edge_connections() const {
 	return NavigationServer3D::get_singleton()->get_debug_navigation_enable_edge_connections();
+}
+
+void NavigationServer2D::set_debug_navigation_enable_geometry_face_random_color(const bool p_value) {
+	NavigationServer3D::get_singleton()->set_debug_navigation_enable_geometry_face_random_color(p_value);
+}
+
+bool NavigationServer2D::get_debug_navigation_enable_geometry_face_random_color() const {
+	return NavigationServer3D::get_singleton()->get_debug_navigation_enable_geometry_face_random_color();
+}
+
+void NavigationServer2D::set_debug_navigation_enable_edge_lines(const bool p_value) {
+	NavigationServer3D::get_singleton()->set_debug_navigation_enable_edge_lines(p_value);
+}
+
+bool NavigationServer2D::get_debug_navigation_enable_edge_lines() const {
+	return NavigationServer3D::get_singleton()->get_debug_navigation_enable_edge_lines();
+}
+
+void NavigationServer2D::set_debug_navigation_agent_path_color(const Color &p_color) {
+	NavigationServer3D::get_singleton()->set_debug_navigation_agent_path_color(p_color);
+}
+
+Color NavigationServer2D::get_debug_navigation_agent_path_color() const {
+	return NavigationServer3D::get_singleton()->get_debug_navigation_agent_path_color();
+}
+
+void NavigationServer2D::set_debug_navigation_enable_agent_paths(const bool p_value) {
+	NavigationServer3D::get_singleton()->set_debug_navigation_enable_agent_paths(p_value);
+}
+
+bool NavigationServer2D::get_debug_navigation_enable_agent_paths() const {
+	return NavigationServer3D::get_singleton()->get_debug_navigation_enable_agent_paths();
+}
+
+void NavigationServer2D::set_debug_navigation_agent_path_point_size(float p_point_size) {
+	NavigationServer3D::get_singleton()->set_debug_navigation_agent_path_point_size(p_point_size);
+}
+
+float NavigationServer2D::get_debug_navigation_agent_path_point_size() const {
+	return NavigationServer3D::get_singleton()->get_debug_navigation_agent_path_point_size();
 }
 #endif // DEBUG_ENABLED
 
@@ -285,14 +342,29 @@ void NavigationServer2D::_bind_methods() {
 
 	ClassDB::bind_method(D_METHOD("free_rid", "rid"), &NavigationServer2D::free);
 
+	ClassDB::bind_method(D_METHOD("set_debug_enabled", "enabled"), &NavigationServer2D::set_debug_enabled);
+	ClassDB::bind_method(D_METHOD("get_debug_enabled"), &NavigationServer2D::get_debug_enabled);
+
 	ADD_SIGNAL(MethodInfo("map_changed", PropertyInfo(Variant::RID, "map")));
+
+	ADD_SIGNAL(MethodInfo("navigation_debug_changed"));
 }
 
 NavigationServer2D::NavigationServer2D() {
 	singleton = this;
 	ERR_FAIL_COND_MSG(!NavigationServer3D::get_singleton(), "The Navigation3D singleton should be initialized before the 2D one.");
 	NavigationServer3D::get_singleton()->connect("map_changed", callable_mp(this, &NavigationServer2D::_emit_map_changed));
+
+#ifdef DEBUG_ENABLED
+	NavigationServer3D::get_singleton()->connect(SNAME("navigation_debug_changed"), callable_mp(this, &NavigationServer2D::_emit_navigation_debug_changed_signal));
+#endif // DEBUG_ENABLED
 }
+
+#ifdef DEBUG_ENABLED
+void NavigationServer2D::_emit_navigation_debug_changed_signal() {
+	emit_signal(SNAME("navigation_debug_changed"));
+}
+#endif // DEBUG_ENABLED
 
 NavigationServer2D::~NavigationServer2D() {
 	singleton = nullptr;

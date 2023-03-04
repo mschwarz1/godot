@@ -334,6 +334,8 @@ _FORCE_INLINE_ bool is_connected_to_prev(char32_t p_chr, char32_t p_pchr) {
 
 /*************************************************************************/
 
+bool TextServerAdvanced::icu_data_loaded = false;
+
 bool TextServerAdvanced::_has_feature(Feature p_feature) const {
 	switch (p_feature) {
 		case FEATURE_SIMPLE_LAYOUT:
@@ -384,6 +386,8 @@ int64_t TextServerAdvanced::_get_features() const {
 void TextServerAdvanced::_free_rid(const RID &p_rid) {
 	_THREAD_SAFE_METHOD_
 	if (font_owner.owns(p_rid)) {
+		MutexLock ftlock(ft_mutex);
+
 		FontAdvanced *fd = font_owner.get_or_null(p_rid);
 		{
 			MutexLock lock(fd->mutex);
@@ -1319,45 +1323,48 @@ _FORCE_INLINE_ bool TextServerAdvanced::_ensure_cache_for_size(FontAdvanced *p_f
 		// Init dynamic font.
 #ifdef MODULE_FREETYPE_ENABLED
 		int error = 0;
-		if (!ft_library) {
-			error = FT_Init_FreeType(&ft_library);
-			if (error != 0) {
-				memdelete(fd);
-				ERR_FAIL_V_MSG(false, "FreeType: Error initializing library: '" + String(FT_Error_String(error)) + "'.");
-			}
+		{
+			MutexLock ftlock(ft_mutex);
+			if (!ft_library) {
+				error = FT_Init_FreeType(&ft_library);
+				if (error != 0) {
+					memdelete(fd);
+					ERR_FAIL_V_MSG(false, "FreeType: Error initializing library: '" + String(FT_Error_String(error)) + "'.");
+				}
 #ifdef MODULE_SVG_ENABLED
-			FT_Property_Set(ft_library, "ot-svg", "svg-hooks", get_tvg_svg_in_ot_hooks());
+				FT_Property_Set(ft_library, "ot-svg", "svg-hooks", get_tvg_svg_in_ot_hooks());
 #endif
-		}
+			}
 
-		memset(&fd->stream, 0, sizeof(FT_StreamRec));
-		fd->stream.base = (unsigned char *)p_font_data->data_ptr;
-		fd->stream.size = p_font_data->data_size;
-		fd->stream.pos = 0;
+			memset(&fd->stream, 0, sizeof(FT_StreamRec));
+			fd->stream.base = (unsigned char *)p_font_data->data_ptr;
+			fd->stream.size = p_font_data->data_size;
+			fd->stream.pos = 0;
 
-		FT_Open_Args fargs;
-		memset(&fargs, 0, sizeof(FT_Open_Args));
-		fargs.memory_base = (unsigned char *)p_font_data->data_ptr;
-		fargs.memory_size = p_font_data->data_size;
-		fargs.flags = FT_OPEN_MEMORY;
-		fargs.stream = &fd->stream;
+			FT_Open_Args fargs;
+			memset(&fargs, 0, sizeof(FT_Open_Args));
+			fargs.memory_base = (unsigned char *)p_font_data->data_ptr;
+			fargs.memory_size = p_font_data->data_size;
+			fargs.flags = FT_OPEN_MEMORY;
+			fargs.stream = &fd->stream;
 
-		int max_index = 0;
-		FT_Face tmp_face = nullptr;
-		error = FT_Open_Face(ft_library, &fargs, -1, &tmp_face);
-		if (tmp_face && error == 0) {
-			max_index = tmp_face->num_faces - 1;
-		}
-		if (tmp_face) {
-			FT_Done_Face(tmp_face);
-		}
+			int max_index = 0;
+			FT_Face tmp_face = nullptr;
+			error = FT_Open_Face(ft_library, &fargs, -1, &tmp_face);
+			if (tmp_face && error == 0) {
+				max_index = tmp_face->num_faces - 1;
+			}
+			if (tmp_face) {
+				FT_Done_Face(tmp_face);
+			}
 
-		error = FT_Open_Face(ft_library, &fargs, CLAMP(p_font_data->face_index, 0, max_index), &fd->face);
-		if (error) {
-			FT_Done_Face(fd->face);
-			fd->face = nullptr;
-			memdelete(fd);
-			ERR_FAIL_V_MSG(false, "FreeType: Error loading font: '" + String(FT_Error_String(error)) + "'.");
+			error = FT_Open_Face(ft_library, &fargs, CLAMP(p_font_data->face_index, 0, max_index), &fd->face);
+			if (error) {
+				FT_Done_Face(fd->face);
+				fd->face = nullptr;
+				memdelete(fd);
+				ERR_FAIL_V_MSG(false, "FreeType: Error loading font: '" + String(FT_Error_String(error)) + "'.");
+			}
 		}
 
 		if (p_font_data->msdf) {
@@ -1784,6 +1791,8 @@ _FORCE_INLINE_ bool TextServerAdvanced::_ensure_cache_for_size(FontAdvanced *p_f
 }
 
 _FORCE_INLINE_ void TextServerAdvanced::_font_clear_cache(FontAdvanced *p_font_data) {
+	MutexLock ftlock(ft_mutex);
+
 	for (const KeyValue<Vector2i, FontForSizeAdvanced *> &E : p_font_data->cache) {
 		memdelete(E.value);
 	}
@@ -1889,6 +1898,8 @@ int64_t TextServerAdvanced::_font_get_face_count(const RID &p_font_rid) const {
 		fargs.memory_size = fd->data_size;
 		fargs.flags = FT_OPEN_MEMORY;
 		fargs.stream = &stream;
+
+		MutexLock ftlock(ft_mutex);
 
 		FT_Face tmp_face = nullptr;
 		error = FT_Open_Face(ft_library, &fargs, -1, &tmp_face);
@@ -2281,6 +2292,7 @@ void TextServerAdvanced::_font_clear_size_cache(const RID &p_font_rid) {
 	ERR_FAIL_COND(!fd);
 
 	MutexLock lock(fd->mutex);
+	MutexLock ftlock(ft_mutex);
 	for (const KeyValue<Vector2i, FontForSizeAdvanced *> &E : fd->cache) {
 		memdelete(E.value);
 	}
@@ -2292,6 +2304,7 @@ void TextServerAdvanced::_font_remove_size_cache(const RID &p_font_rid, const Ve
 	ERR_FAIL_COND(!fd);
 
 	MutexLock lock(fd->mutex);
+	MutexLock ftlock(ft_mutex);
 	if (fd->cache.has(p_size)) {
 		memdelete(fd->cache[p_size]);
 		fd->cache.erase(p_size);
@@ -3893,7 +3906,7 @@ bool TextServerAdvanced::_shaped_text_add_string(const RID &p_shaped, const Stri
 	return true;
 }
 
-bool TextServerAdvanced::_shaped_text_add_object(const RID &p_shaped, const Variant &p_key, const Size2 &p_size, InlineAlignment p_inline_align, int64_t p_length, float p_baseline) {
+bool TextServerAdvanced::_shaped_text_add_object(const RID &p_shaped, const Variant &p_key, const Size2 &p_size, InlineAlignment p_inline_align, int64_t p_length, double p_baseline) {
 	_THREAD_SAFE_METHOD_
 	ShapedTextDataAdvanced *sd = shaped_owner.get_or_null(p_shaped);
 	ERR_FAIL_COND_V(!sd, false);
@@ -3924,7 +3937,7 @@ bool TextServerAdvanced::_shaped_text_add_object(const RID &p_shaped, const Vari
 	return true;
 }
 
-bool TextServerAdvanced::_shaped_text_resize_object(const RID &p_shaped, const Variant &p_key, const Size2 &p_size, InlineAlignment p_inline_align, float p_baseline) {
+bool TextServerAdvanced::_shaped_text_resize_object(const RID &p_shaped, const Variant &p_key, const Size2 &p_size, InlineAlignment p_inline_align, double p_baseline) {
 	ShapedTextDataAdvanced *sd = shaped_owner.get_or_null(p_shaped);
 	ERR_FAIL_COND_V(!sd, false);
 
@@ -4068,7 +4081,6 @@ void TextServerAdvanced::_realign(ShapedTextDataAdvanced *p_sd) const {
 
 RID TextServerAdvanced::_shaped_text_substr(const RID &p_shaped, int64_t p_start, int64_t p_length) const {
 	_THREAD_SAFE_METHOD_
-
 	const ShapedTextDataAdvanced *sd = shaped_owner.get_or_null(p_shaped);
 	ERR_FAIL_COND_V(!sd, RID());
 
@@ -5513,6 +5525,7 @@ void TextServerAdvanced::_shape_run(ShapedTextDataAdvanced *p_sd, int64_t p_star
 }
 
 bool TextServerAdvanced::_shaped_text_shape(const RID &p_shaped) {
+	_THREAD_SAFE_METHOD_
 	ShapedTextDataAdvanced *sd = shaped_owner.get_or_null(p_shaped);
 	ERR_FAIL_COND_V(!sd, false);
 
@@ -6118,20 +6131,22 @@ int64_t TextServerAdvanced::_is_confusable(const String &p_string, const PackedS
 	Vector<UChar *> skeletons;
 	skeletons.resize(p_dict.size());
 
-	USpoofChecker *sc = uspoof_open(&status);
-	uspoof_setChecks(sc, USPOOF_CONFUSABLE, &status);
+	if (sc_conf == nullptr) {
+		sc_conf = uspoof_open(&status);
+		uspoof_setChecks(sc_conf, USPOOF_CONFUSABLE, &status);
+	}
 	for (int i = 0; i < p_dict.size(); i++) {
 		Char16String word = p_dict[i].utf16();
-		int32_t len = uspoof_getSkeleton(sc, 0, word.get_data(), -1, NULL, 0, &status);
+		int32_t len = uspoof_getSkeleton(sc_conf, 0, word.get_data(), -1, NULL, 0, &status);
 		skeletons.write[i] = (UChar *)memalloc(++len * sizeof(UChar));
 		status = U_ZERO_ERROR;
-		uspoof_getSkeleton(sc, 0, word.get_data(), -1, skeletons.write[i], len, &status);
+		uspoof_getSkeleton(sc_conf, 0, word.get_data(), -1, skeletons.write[i], len, &status);
 	}
 
-	int32_t len = uspoof_getSkeleton(sc, 0, utf16.get_data(), -1, NULL, 0, &status);
+	int32_t len = uspoof_getSkeleton(sc_conf, 0, utf16.get_data(), -1, NULL, 0, &status);
 	UChar *skel = (UChar *)memalloc(++len * sizeof(UChar));
 	status = U_ZERO_ERROR;
-	uspoof_getSkeleton(sc, 0, utf16.get_data(), -1, skel, len, &status);
+	uspoof_getSkeleton(sc_conf, 0, utf16.get_data(), -1, skel, len, &status);
 	for (int i = 0; i < skeletons.size(); i++) {
 		if (u_strcmp(skel, skeletons[i]) == 0) {
 			match_index = i;
@@ -6143,7 +6158,6 @@ int64_t TextServerAdvanced::_is_confusable(const String &p_string, const PackedS
 	for (int i = 0; i < skeletons.size(); i++) {
 		memfree(skeletons.write[i]);
 	}
-	uspoof_close(sc);
 
 	ERR_FAIL_COND_V_MSG(U_FAILURE(status), -1, u_errorName(status));
 
@@ -6159,19 +6173,18 @@ bool TextServerAdvanced::_spoof_check(const String &p_string) const {
 	UErrorCode status = U_ZERO_ERROR;
 	Char16String utf16 = p_string.utf16();
 
-	USet *allowed = uset_openEmpty();
-	uset_addAll(allowed, uspoof_getRecommendedSet(&status));
-	uset_addAll(allowed, uspoof_getInclusionSet(&status));
+	if (allowed == nullptr) {
+		allowed = uset_openEmpty();
+		uset_addAll(allowed, uspoof_getRecommendedSet(&status));
+		uset_addAll(allowed, uspoof_getInclusionSet(&status));
+	}
+	if (sc_spoof == nullptr) {
+		sc_spoof = uspoof_open(&status);
+		uspoof_setAllowedChars(sc_spoof, allowed, &status);
+		uspoof_setRestrictionLevel(sc_spoof, USPOOF_MODERATELY_RESTRICTIVE);
+	}
 
-	USpoofChecker *sc = uspoof_open(&status);
-	uspoof_setAllowedChars(sc, allowed, &status);
-	uspoof_setRestrictionLevel(sc, USPOOF_MODERATELY_RESTRICTIVE);
-
-	int32_t bitmask = uspoof_check(sc, utf16.get_data(), -1, NULL, &status);
-
-	uspoof_close(sc);
-	uset_close(allowed);
-
+	int32_t bitmask = uspoof_check(sc_spoof, utf16.get_data(), -1, NULL, &status);
 	ERR_FAIL_COND_V_MSG(U_FAILURE(status), false, u_errorName(status));
 
 	return (bitmask != 0);
@@ -6274,7 +6287,7 @@ String TextServerAdvanced::_string_to_lower(const String &p_string, const String
 	return String::utf16(lower.ptr(), len);
 }
 
-PackedInt32Array TextServerAdvanced::_string_get_word_breaks(const String &p_string, const String &p_language, int p_chars_per_line) const {
+PackedInt32Array TextServerAdvanced::_string_get_word_breaks(const String &p_string, const String &p_language, int64_t p_chars_per_line) const {
 	const String lang = (p_language.is_empty()) ? TranslationServer::get_singleton()->get_tool_locale() : p_language;
 	// Convert to UTF-16.
 	Char16String utf16 = p_string.utf16();
@@ -6569,6 +6582,7 @@ TextServerAdvanced::TextServerAdvanced() {
 }
 
 void TextServerAdvanced::_cleanup() {
+	_THREAD_SAFE_METHOD_
 	for (const KeyValue<SystemFontKey, SystemFontCache> &E : system_fonts) {
 		const Vector<SystemFontCacheRec> &sysf_cache = E.value.var;
 		for (const SystemFontCacheRec &F : sysf_cache) {
@@ -6586,5 +6600,18 @@ TextServerAdvanced::~TextServerAdvanced() {
 		FT_Done_FreeType(ft_library);
 	}
 #endif
-	u_cleanup();
+	if (sc_spoof != nullptr) {
+		uspoof_close(sc_spoof);
+		sc_spoof = nullptr;
+	}
+	if (sc_conf != nullptr) {
+		uspoof_close(sc_conf);
+		sc_conf = nullptr;
+	}
+	if (allowed != nullptr) {
+		uset_close(allowed);
+		allowed = nullptr;
+	}
+
+	std::atexit(u_cleanup);
 }

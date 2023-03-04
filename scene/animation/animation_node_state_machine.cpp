@@ -252,7 +252,7 @@ bool AnimationNodeStateMachinePlayback::_travel(AnimationNodeStateMachine *p_sta
 	path.clear(); //a new one will be needed
 
 	if (current == p_travel) {
-		return false; // Will teleport oneself (restart).
+		return !p_state_machine->is_allow_transition_to_self();
 	}
 
 	Vector2 current_pos = p_state_machine->states[current].position;
@@ -791,6 +791,8 @@ void AnimationNodeStateMachine::add_node(const StringName &p_name, Ref<Animation
 	emit_signal(SNAME("tree_changed"));
 
 	p_node->connect("tree_changed", callable_mp(this, &AnimationNodeStateMachine::_tree_changed), CONNECT_REFERENCE_COUNTED);
+	p_node->connect("animation_node_renamed", callable_mp(this, &AnimationNodeStateMachine::_animation_node_renamed), CONNECT_REFERENCE_COUNTED);
+	p_node->connect("animation_node_removed", callable_mp(this, &AnimationNodeStateMachine::_animation_node_removed), CONNECT_REFERENCE_COUNTED);
 }
 
 void AnimationNodeStateMachine::replace_node(const StringName &p_name, Ref<AnimationNode> p_node) {
@@ -802,6 +804,8 @@ void AnimationNodeStateMachine::replace_node(const StringName &p_name, Ref<Anima
 		Ref<AnimationNode> node = states[p_name].node;
 		if (node.is_valid()) {
 			node->disconnect("tree_changed", callable_mp(this, &AnimationNodeStateMachine::_tree_changed));
+			node->disconnect("animation_node_renamed", callable_mp(this, &AnimationNodeStateMachine::_animation_node_renamed));
+			node->disconnect("animation_node_removed", callable_mp(this, &AnimationNodeStateMachine::_animation_node_removed));
 		}
 	}
 
@@ -811,6 +815,16 @@ void AnimationNodeStateMachine::replace_node(const StringName &p_name, Ref<Anima
 	emit_signal(SNAME("tree_changed"));
 
 	p_node->connect("tree_changed", callable_mp(this, &AnimationNodeStateMachine::_tree_changed), CONNECT_REFERENCE_COUNTED);
+	p_node->connect("animation_node_renamed", callable_mp(this, &AnimationNodeStateMachine::_animation_node_renamed), CONNECT_REFERENCE_COUNTED);
+	p_node->connect("animation_node_removed", callable_mp(this, &AnimationNodeStateMachine::_animation_node_removed), CONNECT_REFERENCE_COUNTED);
+}
+
+void AnimationNodeStateMachine::set_allow_transition_to_self(bool p_enable) {
+	allow_transition_to_self = p_enable;
+}
+
+bool AnimationNodeStateMachine::is_allow_transition_to_self() const {
+	return allow_transition_to_self;
 }
 
 bool AnimationNodeStateMachine::can_edit_node(const StringName &p_name) const {
@@ -876,10 +890,13 @@ void AnimationNodeStateMachine::remove_node(const StringName &p_name) {
 		Ref<AnimationNode> node = states[p_name].node;
 		ERR_FAIL_COND(node.is_null());
 		node->disconnect("tree_changed", callable_mp(this, &AnimationNodeStateMachine::_tree_changed));
+		node->disconnect("animation_node_renamed", callable_mp(this, &AnimationNodeStateMachine::_animation_node_renamed));
+		node->disconnect("animation_node_removed", callable_mp(this, &AnimationNodeStateMachine::_animation_node_removed));
 	}
 
 	states.erase(p_name);
 
+	emit_signal(SNAME("animation_node_removed"), get_instance_id(), p_name);
 	emit_changed();
 	emit_signal(SNAME("tree_changed"));
 }
@@ -899,6 +916,7 @@ void AnimationNodeStateMachine::rename_node(const StringName &p_name, const Stri
 
 	_rename_transitions(p_name, p_new_name);
 
+	emit_signal(SNAME("animation_node_renamed"), get_instance_id(), p_name, p_new_name);
 	emit_changed();
 	emit_signal(SNAME("tree_changed"));
 }
@@ -1357,7 +1375,15 @@ Vector2 AnimationNodeStateMachine::get_node_position(const StringName &p_name) c
 
 void AnimationNodeStateMachine::_tree_changed() {
 	emit_changed();
-	emit_signal(SNAME("tree_changed"));
+	AnimationRootNode::_tree_changed();
+}
+
+void AnimationNodeStateMachine::_animation_node_renamed(const ObjectID &p_oid, const String &p_old_name, const String &p_new_name) {
+	AnimationRootNode::_animation_node_renamed(p_oid, p_old_name, p_new_name);
+}
+
+void AnimationNodeStateMachine::_animation_node_removed(const ObjectID &p_oid, const StringName &p_node) {
+	AnimationRootNode::_animation_node_removed(p_oid, p_node);
 }
 
 void AnimationNodeStateMachine::_bind_methods() {
@@ -1383,6 +1409,11 @@ void AnimationNodeStateMachine::_bind_methods() {
 
 	ClassDB::bind_method(D_METHOD("set_graph_offset", "offset"), &AnimationNodeStateMachine::set_graph_offset);
 	ClassDB::bind_method(D_METHOD("get_graph_offset"), &AnimationNodeStateMachine::get_graph_offset);
+
+	ClassDB::bind_method(D_METHOD("set_allow_transition_to_self", "enable"), &AnimationNodeStateMachine::set_allow_transition_to_self);
+	ClassDB::bind_method(D_METHOD("is_allow_transition_to_self"), &AnimationNodeStateMachine::is_allow_transition_to_self);
+
+	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "allow_transition_to_self"), "set_allow_transition_to_self", "is_allow_transition_to_self");
 }
 
 AnimationNodeStateMachine::AnimationNodeStateMachine() {

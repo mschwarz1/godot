@@ -234,7 +234,7 @@ float AudioStreamPlayer2D::get_volume_db() const {
 }
 
 void AudioStreamPlayer2D::set_pitch_scale(float p_pitch_scale) {
-	ERR_FAIL_COND(p_pitch_scale <= 0.0);
+	ERR_FAIL_COND(!(p_pitch_scale > 0.0));
 	pitch_scale = p_pitch_scale;
 	for (Ref<AudioStreamPlayback> &playback : stream_playbacks) {
 		AudioServer::get_singleton()->set_playback_pitch_scale(playback, p_pitch_scale);
@@ -486,6 +486,7 @@ void AudioStreamPlayer2D::_bind_methods() {
 AudioStreamPlayer2D::AudioStreamPlayer2D() {
 	AudioServer::get_singleton()->connect("bus_layout_changed", callable_mp(this, &AudioStreamPlayer2D::_bus_layout_changed));
 	cached_global_panning_strength = GLOBAL_GET("audio/general/2d_panning_strength");
+	set_hide_clip_children(true);
 }
 
 AudioStreamPlayer2D::~AudioStreamPlayer2D() {

@@ -1105,9 +1105,24 @@ void AnimationPlayerEditor::_animation_duplicate() {
 		return;
 	}
 
+	int count = 2;
 	String new_name = current;
-	while (player->has_animation(new_name)) {
-		new_name = new_name + " (copy)";
+	PackedStringArray split = new_name.split("_");
+	int last_index = split.size() - 1;
+	if (last_index > 0 && split[last_index].is_valid_int() && split[last_index].to_int() >= 0) {
+		count = split[last_index].to_int();
+		split.remove_at(last_index);
+		new_name = String("_").join(split);
+	}
+	while (true) {
+		String attempt = new_name;
+		attempt += vformat("_%d", count);
+		if (player->has_animation(attempt)) {
+			count++;
+			continue;
+		}
+		new_name = attempt;
+		break;
 	}
 
 	if (new_name.contains("/")) {
@@ -1119,6 +1134,7 @@ void AnimationPlayerEditor::_animation_duplicate() {
 
 	name_dialog_op = TOOL_DUPLICATE_ANIM;
 	name_dialog->set_title(TTR("Duplicate Animation"));
+	// TRANSLATORS: This is a label for the new name field in the "Duplicate Animation" dialog.
 	name_title->set_text(TTR("Duplicated Animation Name:"));
 	name->set_text(new_name);
 	name_dialog->popup_centered(Size2(300, 90));

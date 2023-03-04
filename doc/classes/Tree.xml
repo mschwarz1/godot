@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8" ?>
-<class name="Tree" inherits="Control" version="4.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="../class.xsd">
+<class name="Tree" inherits="Control" version="4.1" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="../class.xsd">
 	<brief_description>
 		Control to show a tree of items.
 	</brief_description>
@@ -408,11 +408,6 @@
 			<param index="0" name="item" type="TreeItem" />
 			<description>
 				Emitted when an item is collapsed by a click on the folding arrow.
-			</description>
-		</signal>
-		<signal name="item_custom_button_pressed">
-			<description>
-				Emitted when a custom button is pressed (i.e. in a [constant TreeItem.CELL_MODE_CUSTOM] mode cell).
 			</description>
 		</signal>
 		<signal name="item_edited">

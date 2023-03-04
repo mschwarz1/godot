@@ -896,15 +896,16 @@ void CanvasItemEditor::_snap_changed() {
 }
 
 void CanvasItemEditor::_selection_result_pressed(int p_result) {
-	if (selection_results.size() <= p_result) {
+	if (selection_results_menu.size() <= p_result) {
 		return;
 	}
 
-	CanvasItem *item = selection_results[p_result].item;
+	CanvasItem *item = selection_results_menu[p_result].item;
 
 	if (item) {
 		_select_click_on_item(item, Point2(), selection_menu_additive_selection);
 	}
+	selection_results_menu.clear();
 }
 
 void CanvasItemEditor::_selection_menu_hide() {
@@ -2247,6 +2248,7 @@ bool CanvasItemEditor::_gui_input_select(const Ref<InputEvent> &p_event) {
 					selection_menu->set_item_tooltip(i, String(item->get_name()) + "\nType: " + item->get_class() + "\nPath: " + node_path);
 				}
 
+				selection_results_menu = selection_results;
 				selection_menu_additive_selection = b->is_shift_pressed();
 				selection_menu->set_position(viewport->get_screen_transform().xform(b->get_position()));
 				selection_menu->reset_size();
@@ -5401,11 +5403,13 @@ void CanvasItemEditorPlugin::make_visible(bool p_visible) {
 		canvas_item_editor->show();
 		canvas_item_editor->set_physics_process(true);
 		RenderingServer::get_singleton()->viewport_set_disable_2d(EditorNode::get_singleton()->get_scene_root()->get_viewport_rid(), false);
+		RenderingServer::get_singleton()->viewport_set_environment_mode(EditorNode::get_singleton()->get_scene_root()->get_viewport_rid(), RS::VIEWPORT_ENVIRONMENT_ENABLED);
 
 	} else {
 		canvas_item_editor->hide();
 		canvas_item_editor->set_physics_process(false);
 		RenderingServer::get_singleton()->viewport_set_disable_2d(EditorNode::get_singleton()->get_scene_root()->get_viewport_rid(), true);
+		RenderingServer::get_singleton()->viewport_set_environment_mode(EditorNode::get_singleton()->get_scene_root()->get_viewport_rid(), RS::VIEWPORT_ENVIRONMENT_DISABLED);
 	}
 }
 

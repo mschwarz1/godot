@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8" ?>
-<class name="@GlobalScope" version="4.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="../class.xsd">
+<class name="@GlobalScope" version="4.1" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="../class.xsd">
 	<brief_description>
 		Global scope constants and functions.
 	</brief_description>
@@ -656,7 +656,7 @@
 		<method name="max" qualifiers="vararg">
 			<return type="Variant" />
 			<description>
-				Returns the maximum of the given values. This function can take any number of arguments.
+				Returns the maximum of the given numeric values. This function can take any number of arguments.
 				[codeblock]
 				max(1, 7, 3, -6, 5) # Returns 7
 				[/codeblock]
@@ -689,7 +689,7 @@
 		<method name="min" qualifiers="vararg">
 			<return type="Variant" />
 			<description>
-				Returns the minimum of the given values. This function can take any number of arguments.
+				Returns the minimum of the given numeric values. This function can take any number of arguments.
 				[codeblock]
 				min(1, 7, 3, -6, 5) # Returns -6
 				[/codeblock]
@@ -803,7 +803,8 @@
 				Returns the result of [param base] raised to the power of [param exp].
 				In GDScript, this is the equivalent of the [code]**[/code] operator.
 				[codeblock]
-				pow(2, 5) # Returns 32
+				pow(2, 5)   # Returns 32.0
+				pow(4, 1.5) # Returns 8.0
 				[/codeblock]
 			</description>
 		</method>
@@ -1139,7 +1140,7 @@
 			<return type="float" />
 			<param index="0" name="x" type="float" />
 			<description>
-				Returns [code]-1.0[/code] if [param x] is negative, [code]1.0[/code] if [param x] is positive, and [code]0.0[/code] if if [param x] is zero.
+				Returns [code]-1.0[/code] if [param x] is negative, [code]1.0[/code] if [param x] is positive, and [code]0.0[/code] if [param x] is zero.
 				[codeblock]
 				sign(-6.5) # Returns -1.0
 				sign(0.0)  # Returns 0.0
@@ -1271,7 +1272,13 @@
 		<method name="str" qualifiers="vararg">
 			<return type="String" />
 			<description>
-				Converts one or more arguments of any [Variant] type to [String] in the best way possible.
+				Converts one or more arguments of any [Variant] type to a [String] in the best way possible.
+				[codeblock]
+				var a = [10, 20, 30]
+				var b = str(a)
+				print(len(a)) # Prints 3 (the number of elements in the array).
+				print(len(b)) # Prints 12 (the length of the string "[10, 20, 30]").
+				[/codeblock]
 			</description>
 		</method>
 		<method name="str_to_var">
@@ -1281,14 +1288,14 @@
 				Converts a formatted [param string] that was returned by [method var_to_str] to the original [Variant].
 				[codeblocks]
 				[gdscript]
-				var a = '{ "a": 1, "b": 2 }' # a is a String
-				var b = str_to_var(a)        # b is a Dictionary
-				print(b["a"])                # Prints 1
+				var data = '{ "a": 1, "b": 2 }' # data is a String
+				var dict = str_to_var(data)     # dict is a Dictionary
+				print(dict["a"])                # Prints 1
 				[/gdscript]
 				[csharp]
-				string a = "{ \"a\": 1, \"b\": 2 }";        // a is a string
-				var b = GD.StrToVar(a).AsGodotDictionary(); // b is a Dictionary
-				GD.Print(b["a"]);                           // Prints 1
+				string data = "{ \"a\": 1, \"b\": 2 }";           // data is a string
+				var dict = GD.StrToVar(data).AsGodotDictionary(); // dict is a Dictionary
+				GD.Print(dict["a"]);                              // Prints 1
 				[/csharp]
 				[/codeblocks]
 			</description>
@@ -2266,7 +2273,7 @@
 			Command (on macOS) or Meta/Windows key mask.
 		</constant>
 		<constant name="KEY_MASK_CTRL" value="268435456" enum="KeyModifierMask" is_bitfield="true">
-			Ctrl key mask.
+			Control key mask.
 		</constant>
 		<constant name="KEY_MASK_KPAD" value="536870912" enum="KeyModifierMask" is_bitfield="true">
 			Keypad key mask.
@@ -2287,10 +2294,10 @@
 			Middle mouse button.
 		</constant>
 		<constant name="MOUSE_BUTTON_WHEEL_UP" value="4" enum="MouseButton">
-			Mouse wheel up.
+			Mouse wheel scrolling up.
 		</constant>
 		<constant name="MOUSE_BUTTON_WHEEL_DOWN" value="5" enum="MouseButton">
-			Mouse wheel down.
+			Mouse wheel scrolling down.
 		</constant>
 		<constant name="MOUSE_BUTTON_WHEEL_LEFT" value="6" enum="MouseButton">
 			Mouse wheel left button (only present on some mice).
@@ -2647,8 +2654,8 @@
 			Additionally, other keywords can be included: [code]"exp"[/code] for exponential range editing, [code]"radians"[/code] for editing radian angles in degrees, [code]"degrees"[/code] to hint at an angle and [code]"hide_slider"[/code] to hide the slider.
 		</constant>
 		<constant name="PROPERTY_HINT_ENUM" value="2" enum="PropertyHint">
-			Hints that an [int], [float], or [String] property is an enumerated value to pick in a list specified via a hint string.
-			The hint string is a comma separated list of names such as [code]"Hello,Something,Else"[/code]. Whitespaces are [b]not[/b] removed from either end of a name. For integer and float properties, the first name in the list has value 0, the next 1, and so on. Explicit values can also be specified by appending [code]:integer[/code] to the name, e.g. [code]"Zero,One,Three:3,Four,Six:6"[/code].
+			Hints that an [int] or [String] property is an enumerated value to pick in a list specified via a hint string.
+			The hint string is a comma separated list of names such as [code]"Hello,Something,Else"[/code]. Whitespaces are [b]not[/b] removed from either end of a name. For integer properties, the first name in the list has value 0, the next 1, and so on. Explicit values can also be specified by appending [code]:integer[/code] to the name, e.g. [code]"Zero,One,Three:3,Four,Six:6"[/code].
 		</constant>
 		<constant name="PROPERTY_HINT_ENUM_SUGGESTION" value="3" enum="PropertyHint">
 			Hints that a [String] property can be an enumerated value to pick in a list specified via a hint string such as [code]"Hello,Something,Else"[/code].
@@ -2661,7 +2668,10 @@
 			Hints that a vector property should allow its components to be linked. For example, this allows [member Vector2.x] and [member Vector2.y] to be edited together.
 		</constant>
 		<constant name="PROPERTY_HINT_FLAGS" value="6" enum="PropertyHint">
-			Hints that an [int] property is a bitmask with named bit flags. For example, to allow toggling bits 0, 1, 2 and 4, the hint could be something like [code]"Bit0,Bit1,Bit2,,Bit4"[/code].
+			Hints that an [int] property is a bitmask with named bit flags.
+			The hint string is a comma separated list of names such as [code]"Bit0,Bit1,Bit2,Bit3"[/code]. Whitespaces are [b]not[/b] removed from either end of a name. The first name in the list has value 1, the next 2, then 4, 8, 16 and so on. Explicit values can also be specified by appending [code]:integer[/code] to the name, e.g. [code]"A:4,B:8,C:16"[/code]. You can also combine several flags ([code]"A:4,B:8,AB:12,C:16"[/code]).
+			[b]Note:[/b] A flag value must be at least [code]1[/code] and at most [code]2 ** 32 - 1[/code].
+			[b]Note:[/b] Unlike [constant PROPERTY_HINT_ENUM], the previous explicit value is not taken into account. For the hint [code]"A:16,B,C"[/code], A is 16, B is 2, C is 4.
 		</constant>
 		<constant name="PROPERTY_HINT_LAYERS_2D_RENDER" value="7" enum="PropertyHint">
 			Hints that an [int] property is a bitmask using the optionally named 2D render layers.
@@ -2751,6 +2761,7 @@
 			Hints that a string property is a password, and every character is replaced with the secret character.
 		</constant>
 		<constant name="PROPERTY_HINT_MAX" value="37" enum="PropertyHint">
+			Represents the size of the [enum PropertyHint] enum.
 		</constant>
 		<constant name="PROPERTY_USAGE_NONE" value="0" enum="PropertyUsageFlags" is_bitfield="true">
 			The property is not stored, and does not display in the editor. This is the default for non-exported properties.
@@ -2762,6 +2773,7 @@
 			The property is shown in the [EditorInspector] (default).
 		</constant>
 		<constant name="PROPERTY_USAGE_INTERNAL" value="8" enum="PropertyUsageFlags" is_bitfield="true">
+			The property is excluded from the class reference.
 		</constant>
 		<constant name="PROPERTY_USAGE_CHECKABLE" value="16" enum="PropertyUsageFlags" is_bitfield="true">
 			The property can be checked in the [EditorInspector].
@@ -2809,7 +2821,7 @@
 			When duplicating a resource with [method Resource.duplicate], and this flag is set on a property of that resource, the property should never be duplicated, regardless of the [code]subresources[/code] bool parameter.
 		</constant>
 		<constant name="PROPERTY_USAGE_HIGH_END_GFX" value="2097152" enum="PropertyUsageFlags" is_bitfield="true">
-			The property is only shown in the editor if modern renderers are supported (GLES3 is excluded).
+			The property is only shown in the editor if modern renderers are supported (the Compatibility rendering method is excluded).
 		</constant>
 		<constant name="PROPERTY_USAGE_NODE_PATH_FROM_SCENE_ROOT" value="4194304" enum="PropertyUsageFlags" is_bitfield="true">
 		</constant>

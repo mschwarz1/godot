@@ -333,6 +333,11 @@ void AnimatableBody3D::_body_state_changed(PhysicsDirectBodyState3D *p_state) {
 }
 
 void AnimatableBody3D::_notification(int p_what) {
+#ifdef TOOLS_ENABLED
+	if (Engine::get_singleton()->is_editor_hint()) {
+		return;
+	}
+#endif
 	switch (p_what) {
 		case NOTIFICATION_ENTER_TREE: {
 			last_valid_transform = get_global_transform();
@@ -1560,8 +1565,8 @@ void CharacterBody3D::_move_and_slide_floating(double p_delta) {
 	}
 }
 
-void CharacterBody3D::_snap_on_floor(bool p_was_on_floor, bool p_vel_dir_facing_up) {
-	if (collision_state.floor || !p_was_on_floor || p_vel_dir_facing_up) {
+void CharacterBody3D::apply_floor_snap() {
+	if (collision_state.floor) {
 		return;
 	}
 
@@ -1594,6 +1599,14 @@ void CharacterBody3D::_snap_on_floor(bool p_was_on_floor, bool p_vel_dir_facing_
 			set_global_transform(parameters.from);
 		}
 	}
+}
+
+void CharacterBody3D::_snap_on_floor(bool p_was_on_floor, bool p_vel_dir_facing_up) {
+	if (collision_state.floor || !p_was_on_floor || p_vel_dir_facing_up) {
+		return;
+	}
+
+	apply_floor_snap();
 }
 
 bool CharacterBody3D::_on_floor_if_snapped(bool p_was_on_floor, bool p_vel_dir_facing_up) {
@@ -1949,6 +1962,7 @@ void CharacterBody3D::_notification(int p_what) {
 
 void CharacterBody3D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("move_and_slide"), &CharacterBody3D::move_and_slide);
+	ClassDB::bind_method(D_METHOD("apply_floor_snap"), &CharacterBody3D::apply_floor_snap);
 
 	ClassDB::bind_method(D_METHOD("set_velocity", "velocity"), &CharacterBody3D::set_velocity);
 	ClassDB::bind_method(D_METHOD("get_velocity"), &CharacterBody3D::get_velocity);
