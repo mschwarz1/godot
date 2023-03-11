@@ -39,6 +39,8 @@
 
 #include "thirdparty/misc/mikktspace.h"
 
+#include "thirdparty/manifold/src/manifold/include/manifold.h"
+
 class CSGShape3D : public GeometryInstance3D {
 	GDCLASS(CSGShape3D, GeometryInstance3D);
 
@@ -51,6 +53,7 @@ public:
 	};
 
 private:
+
 	Operation operation = OPERATION_UNION;
 	CSGShape3D *parent_shape = nullptr;
 
@@ -60,7 +63,7 @@ private:
 
 	bool dirty = false;
 	bool last_visible = false;
-	float snap = 0.001;
+	float snap = 1E-5;
 
 	bool use_collision = false;
 	uint32_t collision_layer = 1;

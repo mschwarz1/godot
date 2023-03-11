@@ -31,6 +31,14 @@
 #include "csg_shape.h"
 
 #include "core/math/geometry_2d.h"
+#include "scene/resources/mesh_data_tool.h"
+#include "scene/resources/surface_tool.h"
+#include "thirdparty/glm/glm/ext/vector_float3.hpp"
+#include "thirdparty/glm/glm/ext/vector_int3.hpp"
+#include "thirdparty/manifold/src/manifold/include/manifold.h"
+#include <stdint.h>
+#include <algorithm>
+#include <vector>
 
 void CSGShape3D::set_use_collision(bool p_enable) {
 	if (use_collision == p_enable) {
@@ -170,6 +178,7 @@ CSGBrush *CSGShape3D::_get_brush() {
 		brush = nullptr;
 
 		CSGBrush *n = _build_brush();
+		n->create_manifold();
 
 		for (int i = 0; i < get_child_count(); i++) {
 			CSGShape3D *child = Object::cast_to<CSGShape3D>(get_child(i));
@@ -181,39 +190,39 @@ CSGBrush *CSGShape3D::_get_brush() {
 			}
 
 			CSGBrush *n2 = child->_get_brush();
-			if (!n2) {
+			if (!n2 || (!n2->faces.size())) {
 				continue;
 			}
-			if (!n) {
-				n = memnew(CSGBrush);
-
-				n->copy_from(*n2, child->get_transform());
+			if (!n || (!n->faces.size())) {
+				n = memnew(CSGBrush(*n2, child->get_transform()));
+				n->convert_manifold_to_brush();
 
 			} else {
 				CSGBrush *nn = memnew(CSGBrush);
-				CSGBrush *nn2 = memnew(CSGBrush);
-				nn2->copy_from(*n2, child->get_transform());
-
-				CSGBrushOperation bop;
-
+				CSGBrush *nn2 = memnew(CSGBrush(*n2, child->get_transform()));
 				switch (child->get_operation()) {
 					case CSGShape3D::OPERATION_UNION:
-						bop.merge_brushes(CSGBrushOperation::OPERATION_UNION, *n, *nn2, *nn, snap);
+						nn->manifold = n->manifold + nn2->manifold;
 						break;
 					case CSGShape3D::OPERATION_INTERSECTION:
-						bop.merge_brushes(CSGBrushOperation::OPERATION_INTERSECTION, *n, *nn2, *nn, snap);
+						nn->manifold = n->manifold ^ nn2->manifold;
 						break;
 					case CSGShape3D::OPERATION_SUBTRACTION:
-						bop.merge_brushes(CSGBrushOperation::OPERATION_SUBTRACTION, *n, *nn2, *nn, snap);
+						nn->manifold = n->manifold - nn2->manifold;
 						break;
 				}
+				nn->merge_manifold_properties(n->mesh_id_properties, n->mesh_id_triangle_property_indices, n->mesh_id_materials,
+						nn->mesh_id_properties, nn->mesh_id_triangle_property_indices, nn->mesh_id_materials);
+				nn->merge_manifold_properties(nn2->mesh_id_properties, nn2->mesh_id_triangle_property_indices, nn2->mesh_id_materials,
+						nn->mesh_id_properties, nn->mesh_id_triangle_property_indices, nn->mesh_id_materials);
+				nn->convert_manifold_to_brush();
 				memdelete(n);
 				memdelete(nn2);
 				n = nn;
 			}
 		}
-
 		if (n) {
+			n->convert_manifold_to_brush();
 			AABB aabb;
 			for (int i = 0; i < n->faces.size(); i++) {
 				for (int j = 0; j < 3; j++) {
@@ -228,12 +237,9 @@ CSGBrush *CSGShape3D::_get_brush() {
 		} else {
 			node_aabb = AABB();
 		}
-
 		brush = n;
-
 		dirty = false;
 	}
-
 	return brush;
 }
 
