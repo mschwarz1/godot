@@ -511,6 +511,7 @@ GDScriptCodeGenerator::Address GDScriptCompiler::_parse_expression(CodeGen &code
 		} break;
 		case GDScriptParser::Node::CALL: {
 			const GDScriptParser::CallNode *call = static_cast<const GDScriptParser::CallNode *>(p_expression);
+			bool is_awaited = p_expression == awaited_node;
 			GDScriptDataType type = _gdtype_from_datatype(call->get_datatype(), codegen.script);
 			GDScriptCodeGenerator::Address result;
 			if (p_root) {
@@ -565,13 +566,13 @@ GDScriptCodeGenerator::Address GDScriptCompiler::_parse_expression(CodeGen &code
 						} else if ((codegen.function_node && codegen.function_node->is_static) || call->function_name == "new") {
 							GDScriptCodeGenerator::Address self;
 							self.mode = GDScriptCodeGenerator::Address::CLASS;
-							if (within_await) {
+							if (is_awaited) {
 								gen->write_call_async(result, self, call->function_name, arguments);
 							} else {
 								gen->write_call(result, self, call->function_name, arguments);
 							}
 						} else {
-							if (within_await) {
+							if (is_awaited) {
 								gen->write_call_self_async(result, call->function_name, arguments);
 							} else {
 								gen->write_call_self(result, call->function_name, arguments);
@@ -593,7 +594,7 @@ GDScriptCodeGenerator::Address GDScriptCompiler::_parse_expression(CodeGen &code
 								if (r_error) {
 									return GDScriptCodeGenerator::Address();
 								}
-								if (within_await) {
+								if (is_awaited) {
 									gen->write_call_async(result, base, call->function_name, arguments);
 								} else if (base.type.has_type && base.type.kind != GDScriptDataType::BUILTIN) {
 									// Native method, use faster path.
@@ -666,9 +667,10 @@ GDScriptCodeGenerator::Address GDScriptCompiler::_parse_expression(CodeGen &code
 			const GDScriptParser::AwaitNode *await = static_cast<const GDScriptParser::AwaitNode *>(p_expression);
 
 			GDScriptCodeGenerator::Address result = codegen.add_temporary(_gdtype_from_datatype(p_expression->get_datatype(), codegen.script));
-			within_await = true;
+			GDScriptParser::ExpressionNode *previous_awaited_node = awaited_node;
+			awaited_node = await->to_await;
 			GDScriptCodeGenerator::Address argument = _parse_expression(codegen, r_error, await->to_await);
-			within_await = false;
+			awaited_node = previous_awaited_node;
 			if (r_error) {
 				return GDScriptCodeGenerator::Address();
 			}
@@ -1163,8 +1165,18 @@ GDScriptCodeGenerator::Address GDScriptCompiler::_parse_expression(CodeGen &code
 				bool has_operation = assignment->operation != GDScriptParser::AssignmentNode::OP_NONE;
 				if (has_operation) {
 					// Perform operation.
-					GDScriptCodeGenerator::Address op_result = codegen.add_temporary(_gdtype_from_datatype(assignment->get_datatype(), codegen.script));
 					GDScriptCodeGenerator::Address og_value = _parse_expression(codegen, r_error, assignment->assignee);
+
+					if (!has_setter && !assignment->use_conversion_assign) {
+						// If there's nothing special about the assignment, perform the assignment as part of the operator
+						gen->write_binary_operator(target, assignment->variant_op, og_value, assigned_value);
+						if (assigned_value.mode == GDScriptCodeGenerator::Address::TEMPORARY) {
+							gen->pop_temporary(); // Pop assigned value if not done before.
+						}
+						return GDScriptCodeGenerator::Address();
+					}
+
+					GDScriptCodeGenerator::Address op_result = codegen.add_temporary(_gdtype_from_datatype(assignment->get_datatype(), codegen.script));
 					gen->write_binary_operator(op_result, assignment->variant_op, og_value, assigned_value);
 					to_assign = op_result;
 

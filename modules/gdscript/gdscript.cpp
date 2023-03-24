@@ -1010,12 +1010,14 @@ void GDScript::_bind_methods() {
 }
 
 void GDScript::set_path(const String &p_path, bool p_take_over) {
-	String old_path = path;
 	if (is_root_script()) {
 		Script::set_path(p_path, p_take_over);
 	}
-	this->path = p_path;
+
+	String old_path = path;
+	path = p_path;
 	GDScriptCache::move_script(old_path, p_path);
+
 	for (KeyValue<StringName, Ref<GDScript>> &kv : subclasses) {
 		kv.value->set_path(p_path, p_take_over);
 	}
@@ -2481,7 +2483,7 @@ String GDScriptLanguage::get_global_class_name(const String &p_path, String *r_b
 						subclass = nullptr;
 						break;
 					} else {
-						Vector<StringName> extend_classes = subclass->extends;
+						Vector<GDScriptParser::IdentifierNode *> extend_classes = subclass->extends;
 
 						Ref<FileAccess> subfile = FileAccess::open(subclass->extends_path, FileAccess::READ);
 						if (subfile.is_null()) {
@@ -2511,7 +2513,7 @@ String GDScriptLanguage::get_global_class_name(const String &p_path, String *r_b
 								}
 
 								const GDScriptParser::ClassNode *inner_class = subclass->members[i].m_class;
-								if (inner_class->identifier->name == extend_classes[0]) {
+								if (inner_class->identifier->name == extend_classes[0]->name) {
 									extend_classes.remove_at(0);
 									found = true;
 									subclass = inner_class;
@@ -2525,7 +2527,7 @@ String GDScriptLanguage::get_global_class_name(const String &p_path, String *r_b
 						}
 					}
 				} else if (subclass->extends.size() == 1) {
-					*r_base_type = subclass->extends[0];
+					*r_base_type = subclass->extends[0]->name;
 					subclass = nullptr;
 				} else {
 					break;
