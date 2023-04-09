@@ -34,7 +34,6 @@
 #include "core/input/input.h"
 #include "core/io/config_file.h"
 #include "core/io/file_access.h"
-#include "core/io/image_loader.h"
 #include "core/io/resource_loader.h"
 #include "core/io/resource_saver.h"
 #include "core/object/class_db.h"
@@ -356,12 +355,13 @@ void EditorNode::_update_scene_tabs() {
 		scene_tabs->set_current_tab(editor_data.get_edited_scene());
 	}
 
+	const Size2 add_button_size = Size2(0, scene_tabs->get_size().y);
 	if (scene_tabs->get_offset_buttons_visible()) {
 		// Move the add button to a fixed position.
 		if (scene_tab_add->get_parent() == scene_tabs) {
 			scene_tabs->remove_child(scene_tab_add);
 			scene_tab_add_ph->add_child(scene_tab_add);
-			scene_tab_add->set_position(Point2());
+			scene_tab_add->set_rect(Rect2(Point2(), add_button_size));
 		}
 	} else {
 		// Move the add button to be after the last tab.
@@ -371,16 +371,16 @@ void EditorNode::_update_scene_tabs() {
 		}
 
 		if (scene_tabs->get_tab_count() == 0) {
-			scene_tab_add->set_position(Point2());
+			scene_tab_add->set_rect(Rect2(Point2(), add_button_size));
 			return;
 		}
 
 		Rect2 last_tab = scene_tabs->get_tab_rect(scene_tabs->get_tab_count() - 1);
 		int hsep = scene_tabs->get_theme_constant(SNAME("h_separation"));
 		if (scene_tabs->is_layout_rtl()) {
-			scene_tab_add->set_position(Point2(last_tab.position.x - scene_tab_add->get_size().x - hsep, last_tab.position.y));
+			scene_tab_add->set_rect(Rect2(Point2(last_tab.position.x - scene_tab_add->get_size().x - hsep, last_tab.position.y), add_button_size));
 		} else {
-			scene_tab_add->set_position(Point2(last_tab.position.x + last_tab.size.width + hsep, last_tab.position.y));
+			scene_tab_add->set_rect(Rect2(Point2(last_tab.position.x + last_tab.size.width + hsep, last_tab.position.y), add_button_size));
 		}
 	}
 
@@ -681,10 +681,6 @@ void EditorNode::_notification(int p_what) {
 			editor_data.clear_edited_scenes();
 		} break;
 
-		case Control::NOTIFICATION_THEME_CHANGED: {
-			scene_tab_add_ph->set_custom_minimum_size(scene_tab_add->get_minimum_size());
-		} break;
-
 		case NOTIFICATION_READY: {
 			{
 				_initializing_plugins = true;
@@ -771,6 +767,9 @@ void EditorNode::_notification(int p_what) {
 				scene_root_parent->add_theme_style_override("panel", gui_base->get_theme_stylebox(SNAME("Content"), SNAME("EditorStyles")));
 				bottom_panel->add_theme_style_override("panel", gui_base->get_theme_stylebox(SNAME("BottomPanel"), SNAME("EditorStyles")));
 				tabbar_panel->add_theme_style_override("panel", gui_base->get_theme_stylebox(SNAME("tabbar_background"), SNAME("TabContainer")));
+
+				scene_tabs->add_theme_constant_override("icon_max_width", gui_base->get_theme_constant(SNAME("class_icon_size"), SNAME("Editor")));
+				scene_tab_add_ph->set_custom_minimum_size(scene_tab_add->get_minimum_size());
 
 				main_menu->add_theme_style_override("hover", gui_base->get_theme_stylebox(SNAME("MenuHover"), SNAME("EditorStyles")));
 			}
@@ -1987,9 +1986,6 @@ void EditorNode::_dialog_action(String p_file) {
 			}
 		} break;
 		case FILE_CLOSE:
-		case FILE_CLOSE_ALL_AND_QUIT:
-		case FILE_CLOSE_ALL_AND_RUN_PROJECT_MANAGER:
-		case FILE_CLOSE_ALL_AND_RELOAD_CURRENT_PROJECT:
 		case SCENE_TAB_CLOSE:
 		case FILE_SAVE_SCENE:
 		case FILE_SAVE_AS_SCENE: {
@@ -2704,74 +2700,33 @@ void EditorNode::_menu_option_confirm(int p_option, bool p_confirmed) {
 			previous_scenes.pop_back();
 
 		} break;
-		case FILE_CLOSE_OTHERS:
-		case FILE_CLOSE_RIGHT:
-		case FILE_CLOSE_ALL: {
-			if (editor_data.get_edited_scene_count() > 1 && (current_menu_option != FILE_CLOSE_RIGHT || editor_data.get_edited_scene() < editor_data.get_edited_scene_count() - 1)) {
-				int next_tab = editor_data.get_edited_scene() + 1;
-				next_tab %= editor_data.get_edited_scene_count();
-				_scene_tab_closed(next_tab, current_menu_option);
-			} else {
-				if (current_menu_option != FILE_CLOSE_ALL) {
-					current_menu_option = -1;
-				} else {
-					_scene_tab_closed(editor_data.get_edited_scene());
+		case FILE_CLOSE_OTHERS: {
+			tab_closing_menu_option = -1;
+			for (int i = 0; i < editor_data.get_edited_scene_count(); i++) {
+				if (i == editor_data.get_edited_scene()) {
+					continue;
 				}
+				tabs_to_close.push_back(editor_data.get_scene_path(i));
 			}
-
-			if (p_confirmed) {
-				_menu_option_confirm(SCENE_TAB_CLOSE, true);
+			_proceed_closing_scene_tabs();
+		} break;
+		case FILE_CLOSE_RIGHT: {
+			tab_closing_menu_option = -1;
+			for (int i = editor_data.get_edited_scene() + 1; i < editor_data.get_edited_scene_count(); i++) {
+				tabs_to_close.push_back(editor_data.get_scene_path(i));
 			}
-
+			_proceed_closing_scene_tabs();
+		} break;
+		case FILE_CLOSE_ALL: {
+			tab_closing_menu_option = -1;
+			for (int i = 0; i < editor_data.get_edited_scene_count(); i++) {
+				tabs_to_close.push_back(editor_data.get_scene_path(i));
+			}
+			_proceed_closing_scene_tabs();
 		} break;
 		case FILE_CLOSE: {
 			_scene_tab_closed(editor_data.get_edited_scene());
 		} break;
-		case FILE_CLOSE_ALL_AND_QUIT:
-		case FILE_CLOSE_ALL_AND_RUN_PROJECT_MANAGER:
-		case FILE_CLOSE_ALL_AND_RELOAD_CURRENT_PROJECT: {
-			if (!p_confirmed) {
-				tab_closing_idx = _next_unsaved_scene(false);
-				if (tab_closing_idx == -1) {
-					tab_closing_idx = -2; // Only external resources are unsaved.
-				} else {
-					_scene_tab_changed(tab_closing_idx);
-				}
-
-				if (unsaved_cache || p_option == FILE_CLOSE_ALL_AND_QUIT || p_option == FILE_CLOSE_ALL_AND_RUN_PROJECT_MANAGER || p_option == FILE_CLOSE_ALL_AND_RELOAD_CURRENT_PROJECT) {
-					if (tab_closing_idx == -2) {
-						if (p_option == FILE_CLOSE_ALL_AND_RELOAD_CURRENT_PROJECT) {
-							save_confirmation->set_ok_button_text(TTR("Save & Reload"));
-							save_confirmation->set_text(TTR("Save modified resources before reloading?"));
-						} else {
-							save_confirmation->set_ok_button_text(TTR("Save & Quit"));
-							save_confirmation->set_text(TTR("Save modified resources before closing?"));
-						}
-					} else {
-						Node *ed_scene_root = editor_data.get_edited_scene_root(tab_closing_idx);
-						if (ed_scene_root) {
-							String scene_filename = ed_scene_root->get_scene_file_path();
-							if (p_option == FILE_CLOSE_ALL_AND_RELOAD_CURRENT_PROJECT) {
-								save_confirmation->set_ok_button_text(TTR("Save & Reload"));
-								save_confirmation->set_text(vformat(TTR("Save changes to '%s' before reloading?"), !scene_filename.is_empty() ? scene_filename : "unsaved scene"));
-							} else {
-								save_confirmation->set_ok_button_text(TTR("Save & Quit"));
-								save_confirmation->set_text(vformat(TTR("Save changes to '%s' before closing?"), !scene_filename.is_empty() ? scene_filename : "unsaved scene"));
-							}
-						}
-					}
-					save_confirmation->popup_centered();
-					break;
-				}
-			}
-			if (!editor_data.get_edited_scene_root(tab_closing_idx)) {
-				// Empty tab.
-				_scene_tab_closed(tab_closing_idx);
-				break;
-			}
-
-			[[fallthrough]];
-		}
 		case SCENE_TAB_CLOSE:
 		case FILE_SAVE_SCENE: {
 			int scene_idx = (p_option == FILE_SAVE_SCENE) ? -1 : tab_closing_idx;
@@ -3047,43 +3002,50 @@ void EditorNode::_menu_option_confirm(int p_option, bool p_confirmed) {
 		case RELOAD_CURRENT_PROJECT: {
 			if (!p_confirmed) {
 				bool save_each = EDITOR_GET("interface/editor/save_each_scene_on_quit");
-				if (_next_unsaved_scene(!save_each) == -1 && !EditorUndoRedoManager::get_singleton()->is_history_unsaved(EditorUndoRedoManager::GLOBAL_HISTORY)) {
-					_discard_changes();
-					break;
-				} else {
-					if (save_each) {
-						if (p_option == RELOAD_CURRENT_PROJECT) {
-							_menu_option_confirm(FILE_CLOSE_ALL_AND_RELOAD_CURRENT_PROJECT, false);
-						} else if (p_option == FILE_QUIT) {
-							_menu_option_confirm(FILE_CLOSE_ALL_AND_QUIT, false);
-						} else {
-							_menu_option_confirm(FILE_CLOSE_ALL_AND_RUN_PROJECT_MANAGER, false);
-						}
-					} else {
-						String unsaved_scenes;
-						int i = _next_unsaved_scene(true, 0);
-						while (i != -1) {
-							unsaved_scenes += "\n            " + editor_data.get_edited_scene_root(i)->get_scene_file_path();
-							i = _next_unsaved_scene(true, ++i);
-						}
+				if (_next_unsaved_scene(!save_each) == -1) {
+					if (EditorUndoRedoManager::get_singleton()->is_history_unsaved(EditorUndoRedoManager::GLOBAL_HISTORY)) {
 						if (p_option == RELOAD_CURRENT_PROJECT) {
 							save_confirmation->set_ok_button_text(TTR("Save & Reload"));
-							save_confirmation->set_text(TTR("Save changes to the following scene(s) before reloading?") + unsaved_scenes);
+							save_confirmation->set_text(TTR("Save modified resources before reloading?"));
 						} else {
 							save_confirmation->set_ok_button_text(TTR("Save & Quit"));
-							save_confirmation->set_text((p_option == FILE_QUIT ? TTR("Save changes to the following scene(s) before quitting?") : TTR("Save changes to the following scene(s) before opening Project Manager?")) + unsaved_scenes);
+							save_confirmation->set_text(TTR("Save modified resources before closing?"));
 						}
 						save_confirmation->popup_centered();
+						break;
 					}
+
+					_discard_changes();
+					break;
+				}
+
+				if (save_each) {
+					tab_closing_menu_option = current_menu_option;
+					for (int i = 0; i < editor_data.get_edited_scene_count(); i++) {
+						tabs_to_close.push_back(editor_data.get_scene_path(i));
+					}
+					_proceed_closing_scene_tabs();
+				} else {
+					String unsaved_scenes;
+					int i = _next_unsaved_scene(true, 0);
+					while (i != -1) {
+						unsaved_scenes += "\n            " + editor_data.get_edited_scene_root(i)->get_scene_file_path();
+						i = _next_unsaved_scene(true, ++i);
+					}
+					if (p_option == RELOAD_CURRENT_PROJECT) {
+						save_confirmation->set_ok_button_text(TTR("Save & Reload"));
+						save_confirmation->set_text(TTR("Save changes to the following scene(s) before reloading?") + unsaved_scenes);
+					} else {
+						save_confirmation->set_ok_button_text(TTR("Save & Quit"));
+						save_confirmation->set_text((p_option == FILE_QUIT ? TTR("Save changes to the following scene(s) before quitting?") : TTR("Save changes to the following scene(s) before opening Project Manager?")) + unsaved_scenes);
+					}
+					save_confirmation->popup_centered();
 				}
 
 				DisplayServer::get_singleton()->window_request_attention();
 				break;
 			}
-
-			if (_next_unsaved_scene(true) != -1) {
-				_save_all_scenes();
-			}
+			_save_external_resources();
 			_discard_changes();
 		} break;
 		case SETTINGS_UPDATE_CONTINUOUSLY: {
@@ -3289,7 +3251,7 @@ int EditorNode::_next_unsaved_scene(bool p_valid_filename, int p_start) {
 		bool unsaved = EditorUndoRedoManager::get_singleton()->is_history_unsaved(editor_data.get_scene_history_id(i));
 		if (unsaved) {
 			String scene_filename = editor_data.get_edited_scene_root(i)->get_scene_file_path();
-			if (p_valid_filename && scene_filename.length() == 0) {
+			if (p_valid_filename && scene_filename.is_empty()) {
 				continue;
 			}
 			return i;
@@ -3311,13 +3273,7 @@ void EditorNode::_exit_editor(int p_exit_code) {
 
 void EditorNode::_discard_changes(const String &p_str) {
 	switch (current_menu_option) {
-		case FILE_CLOSE_ALL_AND_QUIT:
-		case FILE_CLOSE_ALL_AND_RUN_PROJECT_MANAGER:
-		case FILE_CLOSE_ALL_AND_RELOAD_CURRENT_PROJECT:
 		case FILE_CLOSE:
-		case FILE_CLOSE_OTHERS:
-		case FILE_CLOSE_RIGHT:
-		case FILE_CLOSE_ALL:
 		case SCENE_TAB_CLOSE: {
 			Node *scene = editor_data.get_edited_scene_root(tab_closing_idx);
 			if (scene != nullptr) {
@@ -3327,39 +3283,12 @@ void EditorNode::_discard_changes(const String &p_str) {
 				}
 			}
 
-			_remove_scene(tab_closing_idx);
-			_update_scene_tabs();
-
-			if (current_menu_option == FILE_CLOSE_ALL_AND_QUIT || current_menu_option == FILE_CLOSE_ALL_AND_RUN_PROJECT_MANAGER || current_menu_option == FILE_CLOSE_ALL_AND_RELOAD_CURRENT_PROJECT) {
-				// If restore tabs is enabled, reopen the scene that has just been closed, so it's remembered properly.
-				if (bool(EDITOR_GET("interface/scene_tabs/restore_scenes_on_load"))) {
-					_menu_option_confirm(FILE_OPEN_PREV, true);
-				}
-				if (_next_unsaved_scene(false) == -1) {
-					if (current_menu_option == FILE_CLOSE_ALL_AND_RELOAD_CURRENT_PROJECT) {
-						current_menu_option = RELOAD_CURRENT_PROJECT;
-					} else if (current_menu_option == FILE_CLOSE_ALL_AND_QUIT) {
-						current_menu_option = FILE_QUIT;
-					} else {
-						current_menu_option = RUN_PROJECT_MANAGER;
-					}
-					_discard_changes();
-				} else {
-					_menu_option_confirm(current_menu_option, false);
-				}
-			} else if (current_menu_option == FILE_CLOSE_OTHERS || current_menu_option == FILE_CLOSE_RIGHT) {
-				if (editor_data.get_edited_scene_count() == 1 || (current_menu_option == FILE_CLOSE_RIGHT && editor_data.get_edited_scene_count() <= editor_data.get_edited_scene() + 1)) {
-					current_menu_option = -1;
-					save_confirmation->hide();
-				} else {
-					_menu_option_confirm(current_menu_option, false);
-				}
-			} else if (current_menu_option == FILE_CLOSE_ALL && editor_data.get_edited_scene_count() > 0) {
-				_menu_option_confirm(current_menu_option, false);
-			} else {
-				current_menu_option = -1;
-				save_confirmation->hide();
+			// Don't close tabs when exiting the editor (required for "restore_scenes_on_load" setting).
+			if (!_is_closing_editor()) {
+				_remove_scene(tab_closing_idx);
+				_update_scene_tabs();
 			}
+			_proceed_closing_scene_tabs();
 		} break;
 		case FILE_QUIT: {
 			_menu_option_confirm(RUN_STOP, true);
@@ -3533,6 +3462,10 @@ void EditorNode::remove_editor_plugin(EditorPlugin *p_editor, bool p_config_chan
 	singleton->editor_plugins_force_input_forwarding->remove_plugin(p_editor);
 	singleton->remove_child(p_editor);
 	singleton->editor_data.remove_editor_plugin(p_editor);
+
+	for (KeyValue<ObjectID, HashSet<EditorPlugin *>> &kv : singleton->active_plugins) {
+		kv.value.erase(p_editor);
+	}
 }
 
 void EditorNode::_update_addon_config() {
@@ -3677,7 +3610,7 @@ void EditorNode::_remove_edited_scene(bool p_change_tab) {
 
 void EditorNode::_remove_scene(int index, bool p_change_tab) {
 	// Clear icon cache in case some scripts are no longer needed.
-	script_icon_cache.clear();
+	editor_data.clear_script_icon_cache();
 
 	if (editor_data.get_edited_scene() == index) {
 		// Scene to remove is current scene.
@@ -4441,18 +4374,6 @@ StringName EditorNode::get_object_custom_type_name(const Object *p_object) const
 	return StringName();
 }
 
-Ref<ImageTexture> EditorNode::_load_custom_class_icon(const String &p_path) const {
-	if (p_path.length()) {
-		Ref<Image> img = memnew(Image);
-		Error err = ImageLoader::load_image(p_path, img);
-		if (err == OK) {
-			img->resize(16 * EDSCALE, 16 * EDSCALE, Image::INTERPOLATE_LANCZOS);
-			return ImageTexture::create_from_image(img);
-		}
-	}
-	return nullptr;
-}
-
 void EditorNode::_pick_main_scene_custom_action(const String &p_custom_action_name) {
 	if (p_custom_action_name == "select_current") {
 		Node *scene = editor_data.get_edited_scene_root();
@@ -4475,106 +4396,86 @@ void EditorNode::_pick_main_scene_custom_action(const String &p_custom_action_na
 	}
 }
 
+Ref<Texture2D> EditorNode::_get_class_or_script_icon(const String &p_class, const Ref<Script> &p_script, const String &p_fallback) {
+	ERR_FAIL_COND_V_MSG(p_class.is_empty(), nullptr, "Class name cannot be empty.");
+	EditorData &ed = EditorNode::get_editor_data();
+
+	// Check for a script icon first.
+	if (p_script.is_valid()) {
+		Ref<Texture2D> script_icon = ed.get_script_icon(p_script);
+		if (script_icon.is_valid()) {
+			return script_icon;
+		}
+
+		// No custom icon was found in the inheritance chain, so check the base
+		// class of the script instead.
+		String base_type;
+		p_script->get_language()->get_global_class_name(p_script->get_path(), &base_type);
+
+		// Check if the base type is an extension-defined type.
+		Ref<Texture2D> ext_icon = ed.extension_class_get_icon(base_type);
+		if (ext_icon.is_valid()) {
+			return ext_icon;
+		}
+
+		// Look for the base type in the editor theme.
+		// This is only relevant for built-in classes.
+		if (gui_base && gui_base->has_theme_icon(base_type, "EditorIcons")) {
+			return gui_base->get_theme_icon(base_type, "EditorIcons");
+		}
+	}
+
+	// Script was not valid or didn't yield any useful values, try the class name
+	// directly.
+
+	// Check if the class name is an extension-defined type.
+	Ref<Texture2D> ext_icon = ed.extension_class_get_icon(p_class);
+	if (ext_icon.is_valid()) {
+		return ext_icon;
+	}
+
+	// Check if the class name is a custom type.
+	// TODO: Should probably be deprecated in 4.x
+	const EditorData::CustomType *ctype = ed.get_custom_type_by_name(p_class);
+	if (ctype && ctype->icon.is_valid()) {
+		return ctype->icon;
+	}
+
+	// Look up the class name or the fallback name in the editor theme.
+	// This is only relevant for built-in classes.
+	if (gui_base) {
+		if (gui_base->has_theme_icon(p_class, SNAME("EditorIcons"))) {
+			return gui_base->get_theme_icon(p_class, SNAME("EditorIcons"));
+		}
+
+		if (p_fallback.length() && gui_base->has_theme_icon(p_fallback, SNAME("EditorIcons"))) {
+			return gui_base->get_theme_icon(p_fallback, SNAME("EditorIcons"));
+		}
+	}
+
+	return nullptr;
+}
+
 Ref<Texture2D> EditorNode::get_object_icon(const Object *p_object, const String &p_fallback) {
-	ERR_FAIL_COND_V(!p_object || !gui_base, nullptr);
+	ERR_FAIL_NULL_V_MSG(p_object, nullptr, "Object cannot be null.");
 
 	Ref<Script> scr = p_object->get_script();
 	if (scr.is_null() && p_object->is_class("Script")) {
 		scr = p_object;
 	}
 
-	if (scr.is_valid() && !script_icon_cache.has(scr)) {
-		Ref<Script> base_scr = scr;
-		while (base_scr.is_valid()) {
-			StringName name = EditorNode::get_editor_data().script_class_get_name(base_scr->get_path());
-			String icon_path = EditorNode::get_editor_data().script_class_get_icon_path(name);
-			Ref<ImageTexture> icon = _load_custom_class_icon(icon_path);
-			if (icon.is_valid()) {
-				script_icon_cache[scr] = icon;
-				return icon;
-			}
-
-			// TODO: should probably be deprecated in 4.x
-			StringName base = base_scr->get_instance_base_type();
-			if (base != StringName() && EditorNode::get_editor_data().get_custom_types().has(base)) {
-				const Vector<EditorData::CustomType> &types = EditorNode::get_editor_data().get_custom_types()[base];
-				for (int i = 0; i < types.size(); ++i) {
-					if (types[i].script == base_scr && types[i].icon.is_valid()) {
-						script_icon_cache[scr] = types[i].icon;
-						return types[i].icon;
-					}
-				}
-			}
-			base_scr = base_scr->get_base_script();
-		}
-
-		// If no icon found, cache it as null.
-		script_icon_cache[scr] = Ref<Texture>();
-	} else if (scr.is_valid() && script_icon_cache.has(scr) && script_icon_cache[scr].is_valid()) {
-		return script_icon_cache[scr];
-	}
-
-	// TODO: Should probably be deprecated in 4.x.
-	if (p_object->has_meta("_editor_icon")) {
-		return p_object->get_meta("_editor_icon");
-	}
-
-	if (gui_base->has_theme_icon(p_object->get_class(), SNAME("EditorIcons"))) {
-		return gui_base->get_theme_icon(p_object->get_class(), SNAME("EditorIcons"));
-	}
-
-	if (p_fallback.length()) {
-		return gui_base->get_theme_icon(p_fallback, SNAME("EditorIcons"));
-	}
-
-	return nullptr;
+	return _get_class_or_script_icon(p_object->get_class(), scr, p_fallback);
 }
 
-Ref<Texture2D> EditorNode::get_class_icon(const String &p_class, const String &p_fallback) const {
+Ref<Texture2D> EditorNode::get_class_icon(const String &p_class, const String &p_fallback) {
 	ERR_FAIL_COND_V_MSG(p_class.is_empty(), nullptr, "Class name cannot be empty.");
 
+	Ref<Script> scr;
 	if (ScriptServer::is_global_class(p_class)) {
-		String class_name = p_class;
-		Ref<Script> scr = EditorNode::get_editor_data().script_class_load_script(class_name);
-
-		while (true) {
-			String icon_path = EditorNode::get_editor_data().script_class_get_icon_path(class_name);
-			Ref<Texture> icon = _load_custom_class_icon(icon_path);
-			if (icon.is_valid()) {
-				return icon; // Current global class has icon.
-			}
-
-			// Find next global class along the inheritance chain.
-			do {
-				Ref<Script> base_scr = scr->get_base_script();
-				if (base_scr.is_null()) {
-					// We've reached a native class, use its icon.
-					String base_type;
-					scr->get_language()->get_global_class_name(scr->get_path(), &base_type);
-					if (gui_base->has_theme_icon(base_type, "EditorIcons")) {
-						return gui_base->get_theme_icon(base_type, "EditorIcons");
-					}
-					return gui_base->get_theme_icon(p_fallback, "EditorIcons");
-				}
-				scr = base_scr;
-				class_name = EditorNode::get_editor_data().script_class_get_name(scr->get_path());
-			} while (class_name.is_empty());
-		}
+		scr = EditorNode::get_editor_data().script_class_load_script(p_class);
 	}
 
-	if (const EditorData::CustomType *ctype = EditorNode::get_editor_data().get_custom_type_by_name(p_class)) {
-		return ctype->icon;
-	}
-
-	if (gui_base->has_theme_icon(p_class, SNAME("EditorIcons"))) {
-		return gui_base->get_theme_icon(p_class, SNAME("EditorIcons"));
-	}
-
-	if (p_fallback.length() && gui_base->has_theme_icon(p_fallback, SNAME("EditorIcons"))) {
-		return gui_base->get_theme_icon(p_fallback, SNAME("EditorIcons"));
-	}
-
-	return nullptr;
+	return _get_class_or_script_icon(p_class, scr, p_fallback);
 }
 
 bool EditorNode::is_object_of_custom_type(const Object *p_object, const StringName &p_class) {
@@ -5516,8 +5417,39 @@ void EditorNode::_scene_tab_script_edited(int p_tab) {
 	}
 }
 
-void EditorNode::_scene_tab_closed(int p_tab, int option) {
-	current_menu_option = option;
+void EditorNode::_proceed_closing_scene_tabs() {
+	List<String>::Element *E = tabs_to_close.front();
+	if (!E) {
+		if (_is_closing_editor()) {
+			current_menu_option = tab_closing_menu_option;
+			_menu_option_confirm(tab_closing_menu_option, true);
+		} else {
+			current_menu_option = -1;
+			save_confirmation->hide();
+		}
+		return;
+	}
+	String scene_to_close = E->get();
+	tabs_to_close.pop_front();
+
+	int tab_idx = -1;
+	for (int i = 0; i < editor_data.get_edited_scene_count(); i++) {
+		if (editor_data.get_scene_path(i) == scene_to_close) {
+			tab_idx = i;
+			break;
+		}
+	}
+	ERR_FAIL_COND(tab_idx < 0);
+
+	_scene_tab_closed(tab_idx);
+}
+
+bool EditorNode::_is_closing_editor() const {
+	return tab_closing_menu_option == FILE_QUIT || tab_closing_menu_option == RUN_PROJECT_MANAGER || tab_closing_menu_option == RELOAD_CURRENT_PROJECT;
+}
+
+void EditorNode::_scene_tab_closed(int p_tab, int p_option) {
+	current_menu_option = p_option;
 	tab_closing_idx = p_tab;
 	Node *scene = editor_data.get_edited_scene_root(p_tab);
 	if (!scene) {
@@ -5527,8 +5459,18 @@ void EditorNode::_scene_tab_closed(int p_tab, int option) {
 
 	bool unsaved = EditorUndoRedoManager::get_singleton()->is_history_unsaved(editor_data.get_scene_history_id(p_tab));
 	if (unsaved) {
-		save_confirmation->set_ok_button_text(TTR("Save & Close"));
-		save_confirmation->set_text(vformat(TTR("Save changes to '%s' before closing?"), !scene->get_scene_file_path().is_empty() ? scene->get_scene_file_path() : "unsaved scene"));
+		if (get_current_tab() != p_tab) {
+			set_current_scene(p_tab);
+		}
+
+		String scene_filename = scene->get_scene_file_path();
+		if (current_menu_option == RELOAD_CURRENT_PROJECT) {
+			save_confirmation->set_ok_button_text(TTR("Save & Reload"));
+			save_confirmation->set_text(vformat(TTR("Save changes to '%s' before reloading?"), !scene_filename.is_empty() ? scene_filename : "unsaved scene"));
+		} else {
+			save_confirmation->set_ok_button_text(TTR("Save & Close"));
+			save_confirmation->set_text(vformat(TTR("Save changes to '%s' before closing?"), !scene_filename.is_empty() ? scene_filename : "unsaved scene"));
+		}
 		save_confirmation->popup_centered();
 	} else {
 		_discard_changes();
@@ -7154,8 +7096,10 @@ EditorNode::EditorNode() {
 	scene_tabs->set_select_with_rmb(true);
 	scene_tabs->add_tab("unsaved");
 	scene_tabs->set_tab_close_display_policy((TabBar::CloseButtonDisplayPolicy)EDITOR_GET("interface/scene_tabs/display_close_button").operator int());
+	scene_tabs->add_theme_constant_override("icon_max_width", gui_base->get_theme_constant(SNAME("class_icon_size"), SNAME("Editor")));
 	scene_tabs->set_max_tab_width(int(EDITOR_GET("interface/scene_tabs/maximum_width")) * EDSCALE);
 	scene_tabs->set_drag_to_rearrange_enabled(true);
+	scene_tabs->set_auto_translate(false);
 	scene_tabs->connect("tab_changed", callable_mp(this, &EditorNode::_scene_tab_changed));
 	scene_tabs->connect("tab_button_pressed", callable_mp(this, &EditorNode::_scene_tab_script_edited));
 	scene_tabs->connect("tab_close_pressed", callable_mp(this, &EditorNode::_scene_tab_closed).bind(SCENE_TAB_CLOSE));
@@ -7436,6 +7380,7 @@ EditorNode::EditorNode() {
 
 	editor_layouts = memnew(PopupMenu);
 	editor_layouts->set_name("Layouts");
+	editor_layouts->set_auto_translate(false);
 	settings_menu->add_child(editor_layouts);
 	editor_layouts->connect("id_pressed", callable_mp(this, &EditorNode::_layout_menu_option));
 	settings_menu->add_submenu_item(TTR("Editor Layout"), "Layouts");

@@ -177,9 +177,6 @@ private:
 		FILE_CLOSE_OTHERS,
 		FILE_CLOSE_RIGHT,
 		FILE_CLOSE_ALL,
-		FILE_CLOSE_ALL_AND_QUIT,
-		FILE_CLOSE_ALL_AND_RUN_PROJECT_MANAGER,
-		FILE_CLOSE_ALL_AND_RELOAD_CURRENT_PROJECT,
 		FILE_QUIT,
 		FILE_EXTERNAL_OPEN_SCENE,
 		EDIT_UNDO,
@@ -329,7 +326,10 @@ private:
 	PopupMenu *scene_tabs_context_menu = nullptr;
 	Panel *tab_preview_panel = nullptr;
 	TextureRect *tab_preview = nullptr;
+
 	int tab_closing_idx = 0;
+	List<String> tabs_to_close;
+	int tab_closing_menu_option = -1;
 
 	bool exiting = false;
 	bool dimmed = false;
@@ -513,7 +513,6 @@ private:
 	PrintHandlerList print_handler;
 
 	HashMap<String, Ref<Texture2D>> icon_type_cache;
-	HashMap<Ref<Script>, Ref<Texture>> script_icon_cache;
 
 	static EditorBuildCallback build_callbacks[MAX_BUILD_CALLBACKS];
 	static EditorPluginInitializeCallback plugin_init_callbacks[MAX_INIT_CALLBACKS];
@@ -653,7 +652,9 @@ private:
 	void _dock_floating_close_request(Control *p_control);
 	void _dock_make_float();
 	void _scene_tab_changed(int p_tab);
-	void _scene_tab_closed(int p_tab, int option = SCENE_TAB_CLOSE);
+	void _proceed_closing_scene_tabs();
+	bool _is_closing_editor() const;
+	void _scene_tab_closed(int p_tab, int p_option = SCENE_TAB_CLOSE);
 	void _scene_tab_hovered(int p_tab);
 	void _scene_tab_exit();
 	void _scene_tab_input(const Ref<InputEvent> &p_input);
@@ -697,7 +698,8 @@ private:
 
 	void _feature_profile_changed();
 	bool _is_class_editor_disabled_by_feature_profile(const StringName &p_class);
-	Ref<ImageTexture> _load_custom_class_icon(const String &p_path) const;
+
+	Ref<Texture2D> _get_class_or_script_icon(const String &p_class, const Ref<Script> &p_script, const String &p_fallback = "Object");
 
 	void _pick_main_scene_custom_action(const String &p_custom_action_name);
 
@@ -879,7 +881,7 @@ public:
 	Ref<Script> get_object_custom_type_base(const Object *p_object) const;
 	StringName get_object_custom_type_name(const Object *p_object) const;
 	Ref<Texture2D> get_object_icon(const Object *p_object, const String &p_fallback = "Object");
-	Ref<Texture2D> get_class_icon(const String &p_class, const String &p_fallback = "Object") const;
+	Ref<Texture2D> get_class_icon(const String &p_class, const String &p_fallback = "Object");
 
 	bool is_object_of_custom_type(const Object *p_object, const StringName &p_class);
 
