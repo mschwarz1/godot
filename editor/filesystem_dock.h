@@ -31,24 +31,25 @@
 #ifndef FILESYSTEM_DOCK_H
 #define FILESYSTEM_DOCK_H
 
-#include "editor/create_dialog.h"
 #include "editor/dependency_editor.h"
-#include "editor/editor_dir_dialog.h"
 #include "editor/editor_file_system.h"
 #include "editor/plugins/script_editor_plugin.h"
 #include "editor/script_create_dialog.h"
 #include "scene/gui/box_container.h"
 #include "scene/gui/control.h"
 #include "scene/gui/dialogs.h"
-#include "scene/gui/item_list.h"
-#include "scene/gui/line_edit.h"
 #include "scene/gui/menu_button.h"
-#include "scene/gui/progress_bar.h"
 #include "scene/gui/split_container.h"
 #include "scene/gui/tree.h"
 
+class CreateDialog;
+class EditorDirDialog;
+class ItemList;
+class LineEdit;
+class ProgressBar;
 class SceneCreateDialog;
 class ShaderCreateDialog;
+class DirectoryCreateDialog;
 
 class FileSystemDock : public VBoxContainer {
 	GDCLASS(FileSystemDock, VBoxContainer);
@@ -155,8 +156,7 @@ private:
 	LineEdit *rename_dialog_text = nullptr;
 	ConfirmationDialog *duplicate_dialog = nullptr;
 	LineEdit *duplicate_dialog_text = nullptr;
-	ConfirmationDialog *make_dir_dialog = nullptr;
-	LineEdit *make_dir_dialog_text = nullptr;
+	DirectoryCreateDialog *make_dir_dialog = nullptr;
 	ConfirmationDialog *overwrite_dialog = nullptr;
 	SceneCreateDialog *make_scene_dialog = nullptr;
 	ScriptCreateDialog *make_script_dialog = nullptr;
@@ -241,7 +241,6 @@ private:
 	void _folder_removed(String p_folder);
 
 	void _resource_created();
-	void _make_dir_confirm();
 	void _make_scene_confirm();
 	void _rename_operation_confirm();
 	void _duplicate_operation_confirm();

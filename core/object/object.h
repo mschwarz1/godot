@@ -41,7 +41,6 @@
 #include "core/templates/list.h"
 #include "core/templates/rb_map.h"
 #include "core/templates/safe_refcount.h"
-#include "core/templates/vmap.h"
 #include "core/variant/callable_bind.h"
 #include "core/variant/variant.h"
 
@@ -587,7 +586,7 @@ private:
 		};
 
 		MethodInfo user;
-		VMap<Callable, Slot> slot_map;
+		HashMap<Callable, Slot, HashableHasher<Callable>> slot_map;
 	};
 
 	HashMap<StringName, SignalData> signal_map;
@@ -717,7 +716,7 @@ protected:
 		return &_class_name_static;
 	}
 
-	Vector<StringName> _get_meta_list_bind() const;
+	TypedArray<StringName> _get_meta_list_bind() const;
 	TypedArray<Dictionary> _get_property_list_bind() const;
 	TypedArray<Dictionary> _get_method_list_bind() const;
 
@@ -725,7 +724,7 @@ protected:
 
 	friend class ClassDB;
 
-	void _disconnect(const StringName &p_signal, const Callable &p_callable, bool p_force = false);
+	bool _disconnect(const StringName &p_signal, const Callable &p_callable, bool p_force = false);
 
 public: // Should be protected, but bug in clang++.
 	static void initialize_class();

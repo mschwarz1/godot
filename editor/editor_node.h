@@ -34,11 +34,7 @@
 #include "core/templates/safe_refcount.h"
 #include "editor/editor_data.h"
 #include "editor/editor_folding.h"
-#include "editor/editor_native_shader_source_visualizer.h"
 #include "editor/editor_plugin.h"
-#include "editor/editor_run.h"
-#include "editor/editor_title_bar.h"
-#include "editor/export/editor_export.h"
 
 typedef void (*EditorNodeInitCallback)();
 typedef void (*EditorPluginInitializeCallback)();
@@ -46,71 +42,77 @@ typedef bool (*EditorBuildCallback)();
 
 class AcceptDialog;
 class AcceptDialogAutoReparent;
-class AudioStreamPreviewGenerator;
-class BackgroundProgress;
 class CenterContainer;
 class CheckBox;
 class ColorPicker;
 class ConfirmationDialog;
 class Control;
-class DependencyEditor;
-class DependencyErrorDialog;
-class DynamicFontImportSettings;
-class EditorAbout;
-class EditorCommandPalette;
-class EditorExport;
-class EditorExtensionManager;
-class EditorFeatureProfileManager;
-class EditorFileDialog;
-class EditorFileServer;
-class EditorFolding;
-class EditorInspector;
-class EditorLayoutsDialog;
-class EditorLog;
-class EditorPluginList;
-class EditorQuickOpen;
-class EditorPropertyResource;
-class EditorResourcePreview;
-class EditorResourceConversionPlugin;
-class EditorRun;
-class EditorRunNative;
-class EditorSelectionHistory;
-class EditorSettingsDialog;
-class EditorToaster;
-class EditorUndoRedoManager;
-class ExportTemplateManager;
-class FBXImporterManager;
 class FileDialog;
-class FileSystemDock;
-class HistoryDock;
+class HBoxContainer;
 class HSplitContainer;
-class ImportDock;
 class LinkButton;
 class MenuBar;
 class MenuButton;
 class Node2D;
-class NodeDock;
 class OptionButton;
-class OrphanResourcesDialog;
 class Panel;
 class PanelContainer;
-class PluginConfigDialog;
-class ProgressDialog;
-class ProjectExportDialog;
-class ProjectSettingsEditor;
-class RunSettingsDialog;
-class SceneImportSettings;
-class AudioStreamImportSettings;
-class ScriptCreateDialog;
+class PopupPanel;
+class RichTextLabel;
 class SubViewport;
 class TabBar;
 class TabContainer;
 class TextureRect;
 class TextureProgressBar;
 class Tree;
+class VBoxContainer;
 class VSplitContainer;
 class Window;
+
+class AudioStreamImportSettings;
+class AudioStreamPreviewGenerator;
+class BackgroundProgress;
+class DependencyEditor;
+class DependencyErrorDialog;
+class DynamicFontImportSettings;
+class EditorAbout;
 class EditorBuildProfileManager;
+class EditorCommandPalette;
+class EditorExport;
+class EditorExtensionManager;
+class EditorFeatureProfileManager;
+class EditorFileDialog;
+class EditorFolding;
+class EditorInspector;
+class EditorLayoutsDialog;
+class EditorLog;
+class EditorNativeShaderSourceVisualizer;
+class EditorPluginList;
+class EditorQuickOpen;
+class EditorPropertyResource;
+class EditorResourcePreview;
+class EditorResourceConversionPlugin;
+class EditorRunBar;
+class EditorRunNative;
+class EditorSelectionHistory;
+class EditorSettingsDialog;
+class EditorTitleBar;
+class EditorToaster;
+class EditorUndoRedoManager;
+class ExportTemplateManager;
+class FBXImporterManager;
+class FileSystemDock;
+class HistoryDock;
+class ImportDock;
+class NodeDock;
+class OrphanResourcesDialog;
+class PluginConfigDialog;
+class ProgressDialog;
+class ProjectExportDialog;
+class ProjectSettingsEditor;
+class RunSettingsDialog;
+class SceneImportSettings;
+class ScriptCreateDialog;
 
 class EditorNode : public Node {
 	GDCLASS(EditorNode, Node);
@@ -161,6 +163,7 @@ private:
 		FILE_SAVE_ALL_SCENES,
 		FILE_SAVE_AND_RUN,
 		FILE_SAVE_AND_RUN_MAIN_SCENE,
+		FILE_RUN_SCENE,
 		FILE_SHOW_IN_FILESYSTEM,
 		FILE_EXPORT_PROJECT,
 		FILE_EXPORT_MESH_LIBRARY,
@@ -187,11 +190,7 @@ private:
 		TOOLS_CUSTOM,
 		RESOURCE_SAVE,
 		RESOURCE_SAVE_AS,
-		RUN_PLAY,
 
-		RUN_STOP,
-		RUN_PLAY_SCENE,
-		RUN_PLAY_CUSTOM_SCENE,
 		RUN_SETTINGS,
 		RUN_USER_DATA_FOLDER,
 		RELOAD_CURRENT_PROJECT,
@@ -264,12 +263,10 @@ private:
 
 	EditorData editor_data;
 	EditorFolding editor_folding;
-	EditorRun editor_run;
 	EditorSelectionHistory editor_history;
 
 	EditorCommandPalette *command_palette = nullptr;
 	EditorExport *editor_export = nullptr;
-	EditorInterface *editor_interface = nullptr;
 	EditorLog *log = nullptr;
 	EditorNativeShaderSourceVisualizer *native_shader_source_visualizer = nullptr;
 	EditorPlugin *editor_plugin_screen = nullptr;
@@ -277,9 +274,7 @@ private:
 	EditorPluginList *editor_plugins_force_over = nullptr;
 	EditorPluginList *editor_plugins_over = nullptr;
 	EditorQuickOpen *quick_open = nullptr;
-	EditorQuickOpen *quick_run = nullptr;
 	EditorResourcePreview *resource_preview = nullptr;
-	EditorRunNative *run_native = nullptr;
 	EditorSelection *editor_selection = nullptr;
 	EditorSettingsDialog *editor_settings_dialog = nullptr;
 	HistoryDock *history_dock = nullptr;
@@ -342,7 +337,8 @@ private:
 	Label *project_title = nullptr;
 	Control *left_menu_spacer = nullptr;
 	Control *right_menu_spacer = nullptr;
-	EditorTitleBar *menu_hb = nullptr;
+	EditorTitleBar *title_bar = nullptr;
+	EditorRunBar *project_run_bar = nullptr;
 	VBoxContainer *main_screen_vbox = nullptr;
 	MenuBar *main_menu = nullptr;
 	PopupMenu *file_menu = nullptr;
@@ -356,15 +352,6 @@ private:
 	Button *prev_scene = nullptr;
 	Button *search_button = nullptr;
 	TextureProgressBar *audio_vu = nullptr;
-
-	PanelContainer *launch_pad = nullptr;
-	Button *play_button = nullptr;
-	Button *pause_button = nullptr;
-	Button *stop_button = nullptr;
-	Button *play_scene_button = nullptr;
-	Button *play_custom_scene_button = nullptr;
-	PanelContainer *write_movie_panel = nullptr;
-	Button *write_movie_button = nullptr;
 
 	Timer *screenshot_timer = nullptr;
 
@@ -469,7 +456,6 @@ private:
 	bool scene_distraction_free = false;
 	bool script_distraction_free = false;
 
-	bool _playing_edited = false;
 	bool changing_scene = false;
 	bool cmdline_export_mode = false;
 	bool convert_old = false;
@@ -495,9 +481,6 @@ private:
 	String _tmp_import_path;
 	String external_file;
 	String open_navigate;
-
-	String run_custom_filename;
-	String run_current_filename;
 
 	DynamicFontImportSettings *fontdata_import_settings = nullptr;
 	SceneImportSettings *scene_import_settings = nullptr;
@@ -600,14 +583,10 @@ private:
 	void _instantiate_request(const Vector<String> &p_files);
 
 	void _quick_opened();
-	void _quick_run();
 	void _open_command_palette();
 
-	void _write_movie_toggled(bool p_enabled);
-
-	void _run(bool p_current = false, const String &p_custom = "");
-	void _run_native(const Ref<EditorExportPreset> &p_preset);
-	void _reset_play_buttons();
+	void _project_run_started();
+	void _project_run_stopped();
 
 	void _add_to_recent_scenes(const String &p_scene);
 	void _update_recent_scenes();
@@ -687,7 +666,6 @@ private:
 	void _inherit_imported(const String &p_action);
 	void _open_imported();
 
-	void _save_default_environment();
 	void _update_update_spinner();
 
 	void _resources_changed(const Vector<String> &p_resources);
@@ -717,7 +695,6 @@ protected:
 	friend class FileSystemDock;
 
 	static void _bind_methods();
-
 	void _notification(int p_what);
 
 	int get_current_tab();
@@ -738,7 +715,7 @@ public:
 	static EditorData &get_editor_data() { return singleton->editor_data; }
 	static EditorFolding &get_editor_folding() { return singleton->editor_folding; }
 
-	static HBoxContainer *get_menu_hb() { return singleton->menu_hb; }
+	static EditorTitleBar *get_title_bar() { return singleton->title_bar; }
 	static VSplitContainer *get_top_split() { return singleton->top_split; }
 
 	static String adjust_scene_name_casing(const String &root_name);
@@ -788,9 +765,6 @@ public:
 
 	void set_addon_plugin_enabled(const String &p_addon, bool p_enabled, bool p_config_changed = false);
 	bool is_addon_plugin_enabled(const String &p_addon) const;
-
-	void set_movie_maker_enabled(bool p_enabled);
-	bool is_movie_maker_enabled() const;
 
 	void edit_node(Node *p_node);
 	void edit_resource(const Ref<Resource> &p_resource);
@@ -874,7 +848,7 @@ public:
 
 	void notify_all_debug_sessions_exited();
 
-	OS::ProcessID has_child_process(OS::ProcessID p_pid) const { return editor_run.has_child_process(p_pid); }
+	OS::ProcessID has_child_process(OS::ProcessID p_pid) const;
 	void stop_child_process(OS::ProcessID p_pid);
 
 	Ref<Theme> get_editor_theme() const { return theme; }
@@ -908,6 +882,7 @@ public:
 	bool is_scene_in_use(const String &p_path);
 
 	void save_layout();
+	void save_default_environment();
 
 	void open_export_template_manager();
 
@@ -917,8 +892,6 @@ public:
 	void reload_instances_with_path_in_edited_scenes(const String &p_path);
 
 	bool is_exiting() const { return exiting; }
-
-	Button *get_pause_button() { return pause_button; }
 
 	Button *add_bottom_panel_item(String p_text, Control *p_item);
 	void make_bottom_panel_item_visible(Control *p_item);
@@ -937,6 +910,8 @@ public:
 
 	void save_all_scenes();
 	void save_scene_list(Vector<String> p_scene_filenames);
+	void save_before_run();
+	void try_autosave();
 	void restart_editor();
 
 	void notify_settings_changed();
@@ -958,14 +933,6 @@ public:
 	Vector<Ref<EditorResourceConversionPlugin>> find_resource_conversion_plugin(const Ref<Resource> &p_for_resource);
 
 	bool ensure_main_scene(bool p_from_native);
-
-	Error run_play_native(int p_id);
-	void run_play();
-	void run_play_current();
-	void run_play_custom(const String &p_custom);
-	void run_stop();
-	bool is_run_playing() const;
-	String get_run_playing_scene() const;
 };
 
 struct EditorProgress {

@@ -1269,6 +1269,17 @@ Node *Node::get_child(int p_index, bool p_include_internal) const {
 	}
 }
 
+TypedArray<Node> Node::get_children(bool p_include_internal) const {
+	TypedArray<Node> arr;
+	int cc = get_child_count(p_include_internal);
+	arr.resize(cc);
+	for (int i = 0; i < cc; i++) {
+		arr[i] = get_child(i, p_include_internal);
+	}
+
+	return arr;
+}
+
 Node *Node::_get_child_by_name(const StringName &p_name) const {
 	const Node *const *node = data.children.getptr(p_name);
 	if (node) {
@@ -2687,17 +2698,6 @@ void Node::queue_free() {
 	}
 }
 
-TypedArray<Node> Node::_get_children(bool p_include_internal) const {
-	TypedArray<Node> arr;
-	int cc = get_child_count(p_include_internal);
-	arr.resize(cc);
-	for (int i = 0; i < cc; i++) {
-		arr[i] = get_child(i, p_include_internal);
-	}
-
-	return arr;
-}
-
 void Node::set_import_path(const NodePath &p_import_path) {
 #ifdef TOOLS_ENABLED
 	data.import_path = p_import_path;
@@ -2786,12 +2786,18 @@ bool Node::is_displayed_folded() const {
 	return data.display_folded;
 }
 
+bool Node::is_ready() const {
+	return !data.ready_first;
+}
+
 void Node::request_ready() {
 	data.ready_first = true;
 }
 
 void Node::_call_input(const Ref<InputEvent> &p_event) {
-	GDVIRTUAL_CALL(_input, p_event);
+	if (p_event->get_device() != InputEvent::DEVICE_ID_INTERNAL) {
+		GDVIRTUAL_CALL(_input, p_event);
+	}
 	if (!is_inside_tree() || !get_viewport() || get_viewport()->is_input_handled()) {
 		return;
 	}
@@ -2799,7 +2805,9 @@ void Node::_call_input(const Ref<InputEvent> &p_event) {
 }
 
 void Node::_call_shortcut_input(const Ref<InputEvent> &p_event) {
-	GDVIRTUAL_CALL(_shortcut_input, p_event);
+	if (p_event->get_device() != InputEvent::DEVICE_ID_INTERNAL) {
+		GDVIRTUAL_CALL(_shortcut_input, p_event);
+	}
 	if (!is_inside_tree() || !get_viewport() || get_viewport()->is_input_handled()) {
 		return;
 	}
@@ -2807,7 +2815,9 @@ void Node::_call_shortcut_input(const Ref<InputEvent> &p_event) {
 }
 
 void Node::_call_unhandled_input(const Ref<InputEvent> &p_event) {
-	GDVIRTUAL_CALL(_unhandled_input, p_event);
+	if (p_event->get_device() != InputEvent::DEVICE_ID_INTERNAL) {
+		GDVIRTUAL_CALL(_unhandled_input, p_event);
+	}
 	if (!is_inside_tree() || !get_viewport() || get_viewport()->is_input_handled()) {
 		return;
 	}
@@ -2815,7 +2825,9 @@ void Node::_call_unhandled_input(const Ref<InputEvent> &p_event) {
 }
 
 void Node::_call_unhandled_key_input(const Ref<InputEvent> &p_event) {
-	GDVIRTUAL_CALL(_unhandled_key_input, p_event);
+	if (p_event->get_device() != InputEvent::DEVICE_ID_INTERNAL) {
+		GDVIRTUAL_CALL(_unhandled_key_input, p_event);
+	}
 	if (!is_inside_tree() || !get_viewport() || get_viewport()->is_input_handled()) {
 		return;
 	}
@@ -2847,7 +2859,7 @@ void Node::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("remove_child", "node"), &Node::remove_child);
 	ClassDB::bind_method(D_METHOD("reparent", "new_parent", "keep_global_transform"), &Node::reparent, DEFVAL(true));
 	ClassDB::bind_method(D_METHOD("get_child_count", "include_internal"), &Node::get_child_count, DEFVAL(false)); // Note that the default value bound for include_internal is false, while the method is declared with true. This is because internal nodes are irrelevant for GDSCript.
-	ClassDB::bind_method(D_METHOD("get_children", "include_internal"), &Node::_get_children, DEFVAL(false));
+	ClassDB::bind_method(D_METHOD("get_children", "include_internal"), &Node::get_children, DEFVAL(false));
 	ClassDB::bind_method(D_METHOD("get_child", "idx", "include_internal"), &Node::get_child, DEFVAL(false));
 	ClassDB::bind_method(D_METHOD("has_node", "path"), &Node::has_node);
 	ClassDB::bind_method(D_METHOD("get_node", "path"), &Node::get_node);
@@ -2924,6 +2936,7 @@ void Node::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("queue_free"), &Node::queue_free);
 
 	ClassDB::bind_method(D_METHOD("request_ready"), &Node::request_ready);
+	ClassDB::bind_method(D_METHOD("is_node_ready"), &Node::is_ready);
 
 	ClassDB::bind_method(D_METHOD("set_multiplayer_authority", "id", "recursive"), &Node::set_multiplayer_authority, DEFVAL(true));
 	ClassDB::bind_method(D_METHOD("get_multiplayer_authority"), &Node::get_multiplayer_authority);

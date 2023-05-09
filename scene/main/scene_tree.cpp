@@ -78,7 +78,7 @@ void SceneTreeTimer::set_time_left(double p_time) {
 }
 
 double SceneTreeTimer::get_time_left() const {
-	return time_left;
+	return MAX(time_left, 0.0);
 }
 
 void SceneTreeTimer::set_process_always(bool p_process_always) {
@@ -825,7 +825,6 @@ void SceneTree::set_pause(bool p_enabled) {
 		return;
 	}
 	paused = p_enabled;
-	NavigationServer3D::get_singleton()->set_active(!p_enabled);
 	PhysicsServer3D::get_singleton()->set_active(!p_enabled);
 	PhysicsServer2D::get_singleton()->set_active(!p_enabled);
 	if (get_root()) {
@@ -1519,7 +1518,7 @@ SceneTree::SceneTree() {
 					ProjectSettings::get_singleton()->set("rendering/environment/defaults/default_environment", "");
 				} else {
 					// File was erased, notify user.
-					ERR_PRINT(RTR("Default Environment as specified in Project Settings (Rendering -> Environment -> Default Environment) could not be loaded."));
+					ERR_PRINT(RTR("Default Environment as specified in the project setting \"rendering/environment/defaults/default_environment\" could not be loaded."));
 				}
 			}
 		}
