@@ -182,6 +182,7 @@ static int converter_max_line_length = 100000;
 
 HashMap<Main::CLIScope, Vector<String>> forwardable_cli_arguments;
 #endif
+static bool single_threaded_scene = false;
 bool use_startup_benchmark = false;
 String startup_benchmark_file;
 
@@ -209,6 +210,7 @@ static bool use_debug_profiler = false;
 static bool debug_collisions = false;
 static bool debug_paths = false;
 static bool debug_navigation = false;
+static bool debug_avoidance = false;
 #endif
 static int frame_delay = 0;
 static bool disable_render_loop = false;
@@ -219,6 +221,8 @@ static bool print_fps = false;
 #ifdef TOOLS_ENABLED
 static bool dump_gdextension_interface = false;
 static bool dump_extension_api = false;
+static bool validate_extension_api = false;
+static String validate_extension_api_file;
 #endif
 bool profile_gpu = false;
 
@@ -452,10 +456,12 @@ void Main::print_help(const char *p_binary) {
 	OS::get_singleton()->print("  --gpu-abort                       Abort on graphics API usage errors (usually validation layer errors). May help see the problem if your system freezes.\n");
 #endif
 	OS::get_singleton()->print("  --remote-debug <uri>              Remote debug (<protocol>://<host/IP>[:<port>], e.g. tcp://127.0.0.1:6007).\n");
+	OS::get_singleton()->print("  --single-threaded-scene           Scene tree runs in single-threaded mode. Sub-thread groups are disabled and run on the main thread.\n");
 #if defined(DEBUG_ENABLED)
 	OS::get_singleton()->print("  --debug-collisions                Show collision shapes when running the scene.\n");
 	OS::get_singleton()->print("  --debug-paths                     Show path lines when running the scene.\n");
 	OS::get_singleton()->print("  --debug-navigation                Show navigation polygons when running the scene.\n");
+	OS::get_singleton()->print("  --debug-avoidance                 Show navigation polygons when running the scene.\n");
 	OS::get_singleton()->print("  --debug-stringnames               Print all StringName allocations to stdout when the engine quits.\n");
 #endif
 	OS::get_singleton()->print("  --frame-delay <ms>                Simulate high CPU load (delay each frame by <ms> milliseconds).\n");
@@ -464,6 +470,7 @@ void Main::print_help(const char *p_binary) {
 	OS::get_singleton()->print("  --disable-render-loop             Disable render loop so rendering only occurs when called explicitly from script.\n");
 	OS::get_singleton()->print("  --disable-crash-handler           Disable crash handler when supported by the platform code.\n");
 	OS::get_singleton()->print("  --fixed-fps <fps>                 Force a fixed number of frames per second. This setting disables real-time synchronization.\n");
+	OS::get_singleton()->print("  --delta-smoothing <enable>        Enable or disable frame delta smoothing ['enable', 'disable'].\n");
 	OS::get_singleton()->print("  --print-fps                       Print the frames per second to the stdout.\n");
 	OS::get_singleton()->print("\n");
 
@@ -490,6 +497,7 @@ void Main::print_help(const char *p_binary) {
 	OS::get_singleton()->print("  --build-solutions                 Build the scripting solutions (e.g. for C# projects). Implies --editor and requires a valid project to edit.\n");
 	OS::get_singleton()->print("  --dump-gdextension-interface      Generate GDExtension header file 'gdextension_interface.h' in the current folder. This file is the base file required to implement a GDExtension.\n");
 	OS::get_singleton()->print("  --dump-extension-api              Generate JSON dump of the Godot API for GDExtension bindings named 'extension_api.json' in the current folder.\n");
+	OS::get_singleton()->print("  --validate-extension-api <path>   Validate an extension API file dumped (with the option above) from a previous version of the engine to ensure API compatibility. If incompatibilities or errors are detected, the return code will be non zero.\n");
 	OS::get_singleton()->print("  --startup-benchmark               Benchmark the startup time and print it to console.\n");
 	OS::get_singleton()->print("  --startup-benchmark-file <path>   Benchmark the startup time and save it to a given file in JSON format.\n");
 #ifdef TESTS_ENABLED
@@ -787,6 +795,7 @@ Error Main::setup(const char *execpath, int argc, char *argv[], bool p_second_ph
 	Vector<String> breakpoints;
 	bool use_custom_res = true;
 	bool force_res = false;
+	bool delta_smoothing_override = false;
 
 	String default_renderer = "";
 	String default_renderer_mobile = "";
@@ -996,6 +1005,29 @@ Error Main::setup(const char *execpath, int argc, char *argv[], bool p_second_ph
 				OS::get_singleton()->print("Missing tablet driver argument, aborting.\n");
 				goto error;
 			}
+		} else if (I->get() == "--delta-smoothing") {
+			if (I->next()) {
+				String string = I->next()->get();
+				bool recognised = false;
+				if (string == "enable") {
+					OS::get_singleton()->set_delta_smoothing(true);
+					delta_smoothing_override = true;
+					recognised = true;
+				}
+				if (string == "disable") {
+					OS::get_singleton()->set_delta_smoothing(false);
+					delta_smoothing_override = false;
+					recognised = true;
+				}
+				if (!recognised) {
+					OS::get_singleton()->print("Delta-smoothing argument not recognised, aborting.\n");
+					goto error;
+				}
+				N = I->next()->next();
+			} else {
+				OS::get_singleton()->print("Missing delta-smoothing argument, aborting.\n");
+				goto error;
+			}
 		} else if (I->get() == "--single-window") { // force single window
 
 			single_window = true;
@@ -1140,6 +1172,8 @@ Error Main::setup(const char *execpath, int argc, char *argv[], bool p_second_ph
 				OS::get_singleton()->print("Missing remote debug server uri, aborting.\n");
 				goto error;
 			}
+		} else if (I->get() == "--single-threaded-scene") {
+			single_threaded_scene = true;
 		} else if (I->get() == "--build-solutions") { // Build the scripting solution such C#
 
 			auto_build_solutions = true;
@@ -1165,6 +1199,25 @@ Error Main::setup(const char *execpath, int argc, char *argv[], bool p_second_ph
 			// run the project instead of a cmdline tool.
 			// Needs full refactoring to fix properly.
 			main_args.push_back(I->get());
+		} else if (I->get() == "--validate-extension-api") {
+			// Register as an editor instance to use low-end fallback if relevant.
+			editor = true;
+			cmdline_tool = true;
+			validate_extension_api = true;
+			// Hack. Not needed but otherwise we end up detecting that this should
+			// run the project instead of a cmdline tool.
+			// Needs full refactoring to fix properly.
+			main_args.push_back(I->get());
+
+			if (I->next()) {
+				validate_extension_api_file = I->next()->get();
+
+				N = I->next()->next();
+			} else {
+				OS::get_singleton()->print("Missing file to load argument after --validate-extension-api, aborting.");
+				goto error;
+			}
+
 		} else if (I->get() == "--export-release" || I->get() == "--export-debug" ||
 				I->get() == "--export-pack") { // Export project
 			// Actually handling is done in start().
@@ -1308,6 +1361,8 @@ Error Main::setup(const char *execpath, int argc, char *argv[], bool p_second_ph
 			debug_paths = true;
 		} else if (I->get() == "--debug-navigation") {
 			debug_navigation = true;
+		} else if (I->get() == "--debug-avoidance") {
+			debug_avoidance = true;
 		} else if (I->get() == "--debug-stringnames") {
 			StringName::set_debug_stringnames(true);
 #endif
@@ -1444,6 +1499,19 @@ Error Main::setup(const char *execpath, int argc, char *argv[], bool p_second_ph
 
 		goto error;
 #endif
+	}
+
+	// Initialize WorkerThreadPool.
+	{
+		int worker_threads = GLOBAL_GET("threading/worker_pool/max_threads");
+		bool low_priority_use_system_threads = GLOBAL_GET("threading/worker_pool/use_system_threads_for_low_priority_tasks");
+		float low_property_ratio = GLOBAL_GET("threading/worker_pool/low_priority_thread_ratio");
+
+		if (editor || project_manager) {
+			WorkerThreadPool::get_singleton()->init();
+		} else {
+			WorkerThreadPool::get_singleton()->init(worker_threads, low_priority_use_system_threads, low_property_ratio);
+		}
 	}
 
 	// Initialize user data dir.
@@ -1886,6 +1954,11 @@ Error Main::setup(const char *execpath, int argc, char *argv[], bool p_second_ph
 	OS::get_singleton()->set_low_processor_usage_mode(GLOBAL_DEF("application/run/low_processor_mode", false));
 	OS::get_singleton()->set_low_processor_usage_mode_sleep_usec(
 			GLOBAL_DEF(PropertyInfo(Variant::INT, "application/run/low_processor_mode_sleep_usec", PROPERTY_HINT_RANGE, "0,33200,1,or_greater"), 6900)); // Roughly 144 FPS
+
+	GLOBAL_DEF("application/run/delta_smoothing", true);
+	if (!delta_smoothing_override) {
+		OS::get_singleton()->set_delta_smoothing(GLOBAL_GET("application/run/delta_smoothing"));
+	}
 
 	GLOBAL_DEF("display/window/ios/allow_high_refresh_rate", true);
 	GLOBAL_DEF("display/window/ios/hide_home_indicator", true);
@@ -2722,6 +2795,12 @@ bool Main::start() {
 		return false;
 	}
 
+	if (validate_extension_api) {
+		bool valid = GDExtensionAPIDump::validate_extension_json_file(validate_extension_api_file) == OK;
+		OS::get_singleton()->set_exit_code(valid ? EXIT_SUCCESS : EXIT_FAILURE);
+		return false;
+	}
+
 #ifndef DISABLE_DEPRECATED
 	if (converting_project) {
 		int ret = ProjectConverter3To4(converter_max_kb_file, converter_max_line_length).convert();
@@ -2846,10 +2925,25 @@ bool Main::start() {
 		}
 		if (debug_navigation) {
 			sml->set_debug_navigation_hint(true);
+		}
+		if (debug_avoidance) {
+			sml->set_debug_avoidance_hint(true);
+		}
+		if (debug_navigation || debug_avoidance) {
 			NavigationServer3D::get_singleton()->set_active(true);
 			NavigationServer3D::get_singleton()->set_debug_enabled(true);
+			if (debug_navigation) {
+				NavigationServer3D::get_singleton()->set_debug_navigation_enabled(true);
+			}
+			if (debug_avoidance) {
+				NavigationServer3D::get_singleton()->set_debug_avoidance_enabled(true);
+			}
 		}
 #endif
+
+		if (single_threaded_scene) {
+			sml->set_disable_node_threading(true);
+		}
 
 		bool embed_subwindows = GLOBAL_GET("display/window/subwindows/embed_subwindows");
 
@@ -3423,6 +3517,8 @@ void Main::cleanup(bool p_force) {
 		movie_writer->end();
 	}
 
+	ResourceLoader::clear_thread_load_tasks();
+
 	ResourceLoader::remove_custom_loaders();
 	ResourceSaver::remove_custom_savers();
 
@@ -3438,8 +3534,6 @@ void Main::cleanup(bool p_force) {
 
 	ResourceLoader::clear_translation_remaps();
 	ResourceLoader::clear_path_remaps();
-
-	ResourceLoader::clear_thread_load_tasks();
 
 	ScriptServer::finish_languages();
 
