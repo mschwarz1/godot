@@ -31,17 +31,18 @@
 #ifndef GD_MONO_CACHE_H
 #define GD_MONO_CACHE_H
 
-#include <stdint.h>
-
 #include "../csharp_script.h"
 #include "../interop_types.h"
 #include "../mono_gc_handle.h"
+
 #include "core/object/object.h"
 #include "core/string/string_name.h"
 #include "core/string/ustring.h"
 #include "core/variant/callable.h"
 #include "core/variant/dictionary.h"
 #include "core/variant/variant.h"
+
+#include <stdint.h>
 
 class CSharpScript;
 
@@ -90,7 +91,7 @@ struct ManagedCallbacks {
 	using FuncScriptManagerBridge_GetOrCreateScriptBridgeForPath = void(GD_CLR_STDCALL *)(const String *, Ref<CSharpScript> *);
 	using FuncScriptManagerBridge_RemoveScriptBridge = void(GD_CLR_STDCALL *)(const CSharpScript *);
 	using FuncScriptManagerBridge_TryReloadRegisteredScriptWithClass = bool(GD_CLR_STDCALL *)(const CSharpScript *);
-	using FuncScriptManagerBridge_UpdateScriptClassInfo = void(GD_CLR_STDCALL *)(const CSharpScript *, bool *, Array *, Dictionary *, Dictionary *, Ref<CSharpScript> *);
+	using FuncScriptManagerBridge_UpdateScriptClassInfo = void(GD_CLR_STDCALL *)(const CSharpScript *, String *, bool *, bool *, String *, Array *, Dictionary *, Dictionary *, Ref<CSharpScript> *);
 	using FuncScriptManagerBridge_SwapGCHandleForType = bool(GD_CLR_STDCALL *)(GCHandleIntPtr, GCHandleIntPtr *, bool);
 	using FuncScriptManagerBridge_GetPropertyInfoList = void(GD_CLR_STDCALL *)(CSharpScript *, Callback_ScriptManagerBridge_GetPropertyInfoList_Add);
 	using FuncScriptManagerBridge_GetPropertyDefaultValues = void(GD_CLR_STDCALL *)(CSharpScript *, Callback_ScriptManagerBridge_GetPropertyDefaultValues_Add);
@@ -103,6 +104,7 @@ struct ManagedCallbacks {
 	using FuncCSharpInstanceBridge_SerializeState = void(GD_CLR_STDCALL *)(GCHandleIntPtr, const Dictionary *, const Dictionary *);
 	using FuncCSharpInstanceBridge_DeserializeState = void(GD_CLR_STDCALL *)(GCHandleIntPtr, const Dictionary *, const Dictionary *);
 	using FuncGCHandleBridge_FreeGCHandle = void(GD_CLR_STDCALL *)(GCHandleIntPtr);
+	using FuncGCHandleBridge_GCHandleIsTargetCollectible = bool(GD_CLR_STDCALL *)(GCHandleIntPtr);
 	using FuncDebuggingUtils_GetCurrentStackInfo = void(GD_CLR_STDCALL *)(Vector<ScriptLanguage::StackInfo> *);
 	using FuncDisposablesTracker_OnGodotShuttingDown = void(GD_CLR_STDCALL *)();
 	using FuncGD_OnCoreApiAssemblyLoaded = void(GD_CLR_STDCALL *)(bool);
@@ -137,6 +139,7 @@ struct ManagedCallbacks {
 	FuncCSharpInstanceBridge_SerializeState CSharpInstanceBridge_SerializeState;
 	FuncCSharpInstanceBridge_DeserializeState CSharpInstanceBridge_DeserializeState;
 	FuncGCHandleBridge_FreeGCHandle GCHandleBridge_FreeGCHandle;
+	FuncGCHandleBridge_GCHandleIsTargetCollectible GCHandleBridge_GCHandleIsTargetCollectible;
 	FuncDebuggingUtils_GetCurrentStackInfo DebuggingUtils_GetCurrentStackInfo;
 	FuncDisposablesTracker_OnGodotShuttingDown DisposablesTracker_OnGodotShuttingDown;
 	FuncGD_OnCoreApiAssemblyLoaded GD_OnCoreApiAssemblyLoaded;

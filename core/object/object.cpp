@@ -903,7 +903,7 @@ void Object::set_meta(const StringName &p_name, const Variant &p_value) {
 	if (E) {
 		E->value = p_value;
 	} else {
-		ERR_FAIL_COND(!p_name.operator String().is_valid_identifier());
+		ERR_FAIL_COND_MSG(!p_name.operator String().is_valid_identifier(), "Invalid metadata identifier: '" + p_name + "'.");
 		Variant *V = &metadata.insert(p_name, p_value)->value;
 
 		const String &sname = p_name;
@@ -1718,6 +1718,30 @@ uint32_t Object::get_edited_version() const {
 	return _edited_version;
 }
 #endif
+
+StringName Object::get_class_name_for_extension(const GDExtension *p_library) const {
+	// Only return the class name per the extension if it matches the given p_library.
+	if (_extension && _extension->library == p_library) {
+		return _extension->class_name;
+	}
+
+	// Extensions only have wrapper classes for classes exposed in ClassDB.
+	const StringName *class_name = _get_class_namev();
+	if (ClassDB::is_class_exposed(*class_name)) {
+		return *class_name;
+	}
+
+	// Find the nearest parent class that's exposed.
+	StringName parent_class = ClassDB::get_parent_class(*class_name);
+	while (parent_class != StringName()) {
+		if (ClassDB::is_class_exposed(parent_class)) {
+			return parent_class;
+		}
+		parent_class = ClassDB::get_parent_class(parent_class);
+	}
+
+	return SNAME("Object");
+}
 
 void Object::set_instance_binding(void *p_token, void *p_binding, const GDExtensionInstanceBindingCallbacks *p_callbacks) {
 	// This is only meant to be used on creation by the binder.

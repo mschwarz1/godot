@@ -43,6 +43,7 @@ class ThemeOwner;
 class Window : public Viewport {
 	GDCLASS(Window, Viewport)
 public:
+	// Keep synced with enum hint for `mode` property.
 	enum Mode {
 		MODE_WINDOWED = DisplayServer::WINDOW_MODE_WINDOWED,
 		MODE_MINIMIZED = DisplayServer::WINDOW_MODE_MINIMIZED,
@@ -88,6 +89,7 @@ public:
 		DEFAULT_WINDOW_SIZE = 100,
 	};
 
+	// Keep synced with enum hint for `initial_position` property.
 	enum WindowInitialPosition {
 		WINDOW_INITIAL_POSITION_ABSOLUTE,
 		WINDOW_INITIAL_POSITION_CENTER_PRIMARY_SCREEN,
@@ -261,7 +263,7 @@ public:
 	void set_visible(bool p_visible);
 	bool is_visible() const;
 
-	void update_mouse_cursor_shape();
+	void update_mouse_cursor_state() override;
 
 	void show();
 	void hide();
@@ -401,6 +403,7 @@ public:
 	virtual Transform2D get_final_transform() const override;
 	virtual Transform2D get_screen_transform_internal(bool p_absolute_position = false) const override;
 	virtual Transform2D get_popup_base_transform() const override;
+	virtual bool is_directly_attached_to_screen() const override;
 
 	Rect2i get_parent_rect() const;
 	virtual DisplayServer::WindowID get_window_id() const override;

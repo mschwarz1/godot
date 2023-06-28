@@ -376,6 +376,15 @@ void ColorPicker::_value_changed(double) {
 
 	color = modes[current_mode]->get_color();
 
+	if (current_mode == MODE_HSV) {
+		if (sliders[1]->get_value() > 0 || sliders[0]->get_value() != cached_hue) {
+			cached_hue = sliders[0]->get_value();
+		}
+		if (sliders[2]->get_value() > 0 || sliders[1]->get_value() != cached_saturation) {
+			cached_saturation = sliders[1]->get_value();
+		}
+	}
+
 	if (current_mode == MODE_HSV || current_mode == MODE_OKHSL) {
 		h = sliders[0]->get_value() / 360.0;
 		s = sliders[1]->get_value() / 100.0;

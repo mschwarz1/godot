@@ -25,7 +25,7 @@ namespace Godot.Bridge
         public delegate* unmanaged<godot_string*, godot_ref*, void> ScriptManagerBridge_GetOrCreateScriptBridgeForPath;
         public delegate* unmanaged<IntPtr, void> ScriptManagerBridge_RemoveScriptBridge;
         public delegate* unmanaged<IntPtr, godot_bool> ScriptManagerBridge_TryReloadRegisteredScriptWithClass;
-        public delegate* unmanaged<IntPtr, godot_bool*, godot_array*, godot_dictionary*, godot_dictionary*, godot_ref*, void> ScriptManagerBridge_UpdateScriptClassInfo;
+        public delegate* unmanaged<IntPtr, godot_string*, godot_bool*, godot_bool*, godot_string*, godot_array*, godot_dictionary*, godot_dictionary*, godot_ref*, void> ScriptManagerBridge_UpdateScriptClassInfo;
         public delegate* unmanaged<IntPtr, IntPtr*, godot_bool, godot_bool> ScriptManagerBridge_SwapGCHandleForType;
         public delegate* unmanaged<IntPtr, delegate* unmanaged<IntPtr, godot_string*, void*, int, void>, void> ScriptManagerBridge_GetPropertyInfoList;
         public delegate* unmanaged<IntPtr, delegate* unmanaged<IntPtr, void*, int, void>, void> ScriptManagerBridge_GetPropertyDefaultValues;
@@ -38,6 +38,7 @@ namespace Godot.Bridge
         public delegate* unmanaged<IntPtr, godot_dictionary*, godot_dictionary*, void> CSharpInstanceBridge_SerializeState;
         public delegate* unmanaged<IntPtr, godot_dictionary*, godot_dictionary*, void> CSharpInstanceBridge_DeserializeState;
         public delegate* unmanaged<IntPtr, void> GCHandleBridge_FreeGCHandle;
+        public delegate* unmanaged<IntPtr, godot_bool> GCHandleBridge_GCHandleIsTargetCollectible;
         public delegate* unmanaged<void*, void> DebuggingUtils_GetCurrentStackInfo;
         public delegate* unmanaged<void> DisposablesTracker_OnGodotShuttingDown;
         public delegate* unmanaged<godot_bool, void> GD_OnCoreApiAssemblyLoaded;
@@ -78,6 +79,7 @@ namespace Godot.Bridge
                 CSharpInstanceBridge_SerializeState = &CSharpInstanceBridge.SerializeState,
                 CSharpInstanceBridge_DeserializeState = &CSharpInstanceBridge.DeserializeState,
                 GCHandleBridge_FreeGCHandle = &GCHandleBridge.FreeGCHandle,
+                GCHandleBridge_GCHandleIsTargetCollectible = &GCHandleBridge.GCHandleIsTargetCollectible,
                 DebuggingUtils_GetCurrentStackInfo = &DebuggingUtils.GetCurrentStackInfo,
                 DisposablesTracker_OnGodotShuttingDown = &DisposablesTracker.OnGodotShuttingDown,
                 GD_OnCoreApiAssemblyLoaded = &GD.OnCoreApiAssemblyLoaded,

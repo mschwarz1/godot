@@ -524,8 +524,6 @@ void Window::set_ime_position(const Point2i &p_pos) {
 
 bool Window::is_embedded() const {
 	ERR_READ_THREAD_GUARD_V(false);
-	ERR_FAIL_COND_V(!is_inside_tree(), false);
-
 	return get_embedder() != nullptr;
 }
 
@@ -618,6 +616,8 @@ void Window::_update_from_window() {
 void Window::_clear_window() {
 	ERR_FAIL_COND(window_id == DisplayServer::INVALID_WINDOW_ID);
 
+	bool had_focus = has_focus();
+
 	DisplayServer::get_singleton()->window_set_rect_changed_callback(Callable(), window_id);
 	DisplayServer::get_singleton()->window_set_window_event_callback(Callable(), window_id);
 	DisplayServer::get_singleton()->window_set_input_event_callback(Callable(), window_id);
@@ -640,7 +640,7 @@ void Window::_clear_window() {
 	window_id = DisplayServer::INVALID_WINDOW_ID;
 
 	// If closing window was focused and has a parent, return focus.
-	if (focused && transient_parent) {
+	if (had_focus && transient_parent) {
 		transient_parent->grab_focus();
 	}
 
@@ -721,10 +721,13 @@ void Window::_event_callback(DisplayServer::WindowEvent p_event) {
 	}
 }
 
-void Window::update_mouse_cursor_shape() {
+void Window::update_mouse_cursor_state() {
 	ERR_MAIN_THREAD_GUARD;
-	// The default shape is set in Viewport::_gui_input_event. To instantly
-	// see the shape in the viewport we need to trigger a mouse motion event.
+	// Update states based on mouse cursor position.
+	// This includes updated mouse_enter or mouse_exit signals or the current mouse cursor shape.
+	// These details are set in Viewport::_gui_input_event. To instantly
+	// see the changes in the viewport, we need to trigger a mouse motion event.
+	// This function should be called whenever scene tree changes affect the mouse cursor.
 	Ref<InputEventMouseMotion> mm;
 	Vector2 pos = get_mouse_position();
 	Transform2D xform = get_global_canvas_transform().affine_inverse();
@@ -775,6 +778,9 @@ void Window::set_visible(bool p_visible) {
 	} else {
 		if (visible) {
 			embedder = embedder_vp;
+			if (initial_position != WINDOW_INITIAL_POSITION_ABSOLUTE) {
+				position = (embedder->get_visible_rect().size - size) / 2;
+			}
 			embedder->_sub_window_register(this);
 			RS::get_singleton()->viewport_set_update_mode(get_viewport_rid(), RS::VIEWPORT_UPDATE_WHEN_PARENT_VISIBLE);
 		} else {
@@ -1162,6 +1168,9 @@ void Window::_notification(int p_what) {
 			if (embedded) {
 				// Create as embedded.
 				if (embedder) {
+					if (initial_position != WINDOW_INITIAL_POSITION_ABSOLUTE) {
+						position = (embedder->get_visible_rect().size - size) / 2;
+					}
 					embedder->_sub_window_register(this);
 					RS::get_singleton()->viewport_set_update_mode(get_viewport_rid(), RS::VIEWPORT_UPDATE_WHEN_PARENT_VISIBLE);
 					_update_window_size();
@@ -1178,6 +1187,7 @@ void Window::_notification(int p_what) {
 					{
 						position = DisplayServer::get_singleton()->window_get_position(window_id);
 						size = DisplayServer::get_singleton()->window_get_size(window_id);
+						focused = DisplayServer::get_singleton()->window_is_focused(window_id);
 					}
 					_update_window_size(); // Inform DisplayServer of minimum and maximum size.
 					_update_viewport_size(); // Then feed back to the viewport.
@@ -1755,6 +1765,9 @@ void Window::grab_focus() {
 
 bool Window::has_focus() const {
 	ERR_READ_THREAD_GUARD_V(false);
+	if (window_id != DisplayServer::INVALID_WINDOW_ID) {
+		return DisplayServer::get_singleton()->window_is_focused(window_id);
+	}
 	return focused;
 }
 
@@ -1767,7 +1780,7 @@ Rect2i Window::get_usable_parent_rect() const {
 	} else {
 		const Window *w = is_visible() ? this : get_parent_visible_window();
 		//find a parent that can contain us
-		ERR_FAIL_COND_V(!w, Rect2());
+		ERR_FAIL_NULL_V(w, Rect2());
 
 		parent_rect = DisplayServer::get_singleton()->screen_get_usable_rect(DisplayServer::get_singleton()->window_get_current_screen(w->get_window_id()));
 	}
@@ -2328,9 +2341,9 @@ Rect2i Window::get_parent_rect() const {
 	if (is_embedded()) {
 		//viewport
 		Node *n = get_parent();
-		ERR_FAIL_COND_V(!n, Rect2i());
+		ERR_FAIL_NULL_V(n, Rect2i());
 		Viewport *p = n->get_viewport();
-		ERR_FAIL_COND_V(!p, Rect2i());
+		ERR_FAIL_NULL_V(p, Rect2i());
 
 		return p->get_visible_rect();
 	} else {
@@ -2474,9 +2487,19 @@ Transform2D Window::get_popup_base_transform() const {
 	return popup_base_transform;
 }
 
+bool Window::is_directly_attached_to_screen() const {
+	if (get_embedder()) {
+		return get_embedder()->is_directly_attached_to_screen();
+	}
+	// Distinguish between the case that this is a native Window and not inside the tree.
+	return is_inside_tree();
+}
+
 void Window::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("set_title", "title"), &Window::set_title);
 	ClassDB::bind_method(D_METHOD("get_title"), &Window::get_title);
+
+	ClassDB::bind_method(D_METHOD("get_window_id"), &Window::get_window_id);
 
 	ClassDB::bind_method(D_METHOD("set_initial_position", "initial_position"), &Window::set_initial_position);
 	ClassDB::bind_method(D_METHOD("get_initial_position"), &Window::get_initial_position);
@@ -2629,13 +2652,15 @@ void Window::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("popup_exclusive_centered_ratio", "from_node", "ratio"), &Window::popup_exclusive_centered_ratio, DEFVAL(0.8));
 	ClassDB::bind_method(D_METHOD("popup_exclusive_centered_clamped", "from_node", "minsize", "fallback_ratio"), &Window::popup_exclusive_centered_clamped, DEFVAL(Size2i()), DEFVAL(0.75));
 
-	ADD_PROPERTY(PropertyInfo(Variant::INT, "initial_position", PROPERTY_HINT_ENUM, "Absolute,Center of Primary Screen,Center of Other Screen,Center of Screen With Mouse Pointer,Center of Screen With Keyboard Focus"), "set_initial_position", "get_initial_position");
-	ADD_PROPERTY(PropertyInfo(Variant::STRING, "title"), "set_title", "get_title");
-	ADD_PROPERTY(PropertyInfo(Variant::VECTOR2I, "position", PROPERTY_HINT_NONE, "suffix:px"), "set_position", "get_position");
-	ADD_PROPERTY(PropertyInfo(Variant::VECTOR2I, "size", PROPERTY_HINT_NONE, "suffix:px"), "set_size", "get_size");
+	// Keep the enum values in sync with the `Mode` enum.
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "mode", PROPERTY_HINT_ENUM, "Windowed,Minimized,Maximized,Fullscreen"), "set_mode", "get_mode");
 
-	// Keep the enum values in sync with the `DisplayServer::SCREEN_` enum.
+	ADD_PROPERTY(PropertyInfo(Variant::STRING, "title"), "set_title", "get_title");
+
+	// Keep the enum values in sync with the `WindowInitialPosition` enum.
+	ADD_PROPERTY(PropertyInfo(Variant::INT, "initial_position", PROPERTY_HINT_ENUM, "Absolute,Center of Primary Screen,Center of Main Window Screen,Center of Other Screen,Center of Screen With Mouse Pointer,Center of Screen With Keyboard Focus"), "set_initial_position", "get_initial_position");
+	ADD_PROPERTY(PropertyInfo(Variant::VECTOR2I, "position", PROPERTY_HINT_NONE, "suffix:px"), "set_position", "get_position");
+	ADD_PROPERTY(PropertyInfo(Variant::VECTOR2I, "size", PROPERTY_HINT_NONE, "suffix:px"), "set_size", "get_size");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "current_screen", PROPERTY_HINT_RANGE, "0,64,1,or_greater"), "set_current_screen", "get_current_screen");
 
 	ADD_PROPERTY(PropertyInfo(Variant::PACKED_VECTOR2_ARRAY, "mouse_passthrough_polygon"), "set_mouse_passthrough_polygon", "get_mouse_passthrough_polygon");

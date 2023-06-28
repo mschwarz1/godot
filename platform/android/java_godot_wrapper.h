@@ -31,12 +31,13 @@
 #ifndef JAVA_GODOT_WRAPPER_H
 #define JAVA_GODOT_WRAPPER_H
 
-#include <android/log.h>
-#include <jni.h>
-
-#include "core/templates/list.h"
 #include "java_godot_view_wrapper.h"
 #include "string_android.h"
+
+#include "core/templates/list.h"
+
+#include <android/log.h>
+#include <jni.h>
 
 // Class that makes functions in java/src/org/godotengine/godot/Godot.java callable from C++
 class GodotJavaWrapper {
@@ -71,6 +72,9 @@ private:
 	jmethodID _get_class_loader = nullptr;
 	jmethodID _create_new_godot_instance = nullptr;
 	jmethodID _get_render_view = nullptr;
+	jmethodID _begin_benchmark_measure = nullptr;
+	jmethodID _end_benchmark_measure = nullptr;
+	jmethodID _dump_benchmark = nullptr;
 
 public:
 	GodotJavaWrapper(JNIEnv *p_env, jobject p_activity, jobject p_godot_instance);
@@ -106,6 +110,9 @@ public:
 	void vibrate(int p_duration_ms);
 	String get_input_fallback_mapping();
 	int create_new_godot_instance(List<String> args);
+	void begin_benchmark_measure(const String &p_label);
+	void end_benchmark_measure(const String &p_label);
+	void dump_benchmark(const String &benchmark_file);
 };
 
 #endif // JAVA_GODOT_WRAPPER_H

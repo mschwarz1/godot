@@ -183,8 +183,6 @@ static int converter_max_line_length = 100000;
 HashMap<Main::CLIScope, Vector<String>> forwardable_cli_arguments;
 #endif
 static bool single_threaded_scene = false;
-bool use_startup_benchmark = false;
-String startup_benchmark_file;
 
 // Display
 
@@ -461,7 +459,7 @@ void Main::print_help(const char *p_binary) {
 	OS::get_singleton()->print("  --debug-collisions                Show collision shapes when running the scene.\n");
 	OS::get_singleton()->print("  --debug-paths                     Show path lines when running the scene.\n");
 	OS::get_singleton()->print("  --debug-navigation                Show navigation polygons when running the scene.\n");
-	OS::get_singleton()->print("  --debug-avoidance                 Show navigation polygons when running the scene.\n");
+	OS::get_singleton()->print("  --debug-avoidance                 Show navigation avoidance debug visuals when running the scene.\n");
 	OS::get_singleton()->print("  --debug-stringnames               Print all StringName allocations to stdout when the engine quits.\n");
 #endif
 	OS::get_singleton()->print("  --frame-delay <ms>                Simulate high CPU load (delay each frame by <ms> milliseconds).\n");
@@ -498,8 +496,8 @@ void Main::print_help(const char *p_binary) {
 	OS::get_singleton()->print("  --dump-gdextension-interface      Generate GDExtension header file 'gdextension_interface.h' in the current folder. This file is the base file required to implement a GDExtension.\n");
 	OS::get_singleton()->print("  --dump-extension-api              Generate JSON dump of the Godot API for GDExtension bindings named 'extension_api.json' in the current folder.\n");
 	OS::get_singleton()->print("  --validate-extension-api <path>   Validate an extension API file dumped (with the option above) from a previous version of the engine to ensure API compatibility. If incompatibilities or errors are detected, the return code will be non zero.\n");
-	OS::get_singleton()->print("  --startup-benchmark               Benchmark the startup time and print it to console.\n");
-	OS::get_singleton()->print("  --startup-benchmark-file <path>   Benchmark the startup time and save it to a given file in JSON format.\n");
+	OS::get_singleton()->print("  --benchmark                       Benchmark the run time and print it to console.\n");
+	OS::get_singleton()->print("  --benchmark-file <path>           Benchmark the run time and save it to a given file in JSON format. The path should be absolute.\n");
 #ifdef TESTS_ENABLED
 	OS::get_singleton()->print("  --test [--help]                   Run unit tests. Use --test --help for more information.\n");
 #endif
@@ -512,6 +510,7 @@ void Main::print_help(const char *p_binary) {
 // are initialized here. This also combines `Main::setup2()` initialization.
 Error Main::test_setup() {
 	Thread::make_main_thread();
+	set_current_thread_safe_for_nodes(true);
 
 	OS::get_singleton()->initialize();
 
@@ -723,14 +722,18 @@ int Main::test_entrypoint(int argc, char *argv[], bool &tests_need_run) {
 
 Error Main::setup(const char *execpath, int argc, char *argv[], bool p_second_phase) {
 	Thread::make_main_thread();
+	set_current_thread_safe_for_nodes(true);
 
 	OS::get_singleton()->initialize();
+
+	// Benchmark tracking must be done after `OS::get_singleton()->initialize()` as on some
+	// platforms, it's used to set up the time utilities.
+	OS::get_singleton()->benchmark_begin_measure("startup_begin");
 
 	engine = memnew(Engine);
 
 	MAIN_PRINT("Main: Initialize CORE");
-	engine->startup_begin();
-	engine->startup_benchmark_begin_measure("core");
+	OS::get_singleton()->benchmark_begin_measure("core");
 
 	register_core_types();
 	register_core_driver_types();
@@ -1008,19 +1011,19 @@ Error Main::setup(const char *execpath, int argc, char *argv[], bool p_second_ph
 		} else if (I->get() == "--delta-smoothing") {
 			if (I->next()) {
 				String string = I->next()->get();
-				bool recognised = false;
+				bool recognized = false;
 				if (string == "enable") {
 					OS::get_singleton()->set_delta_smoothing(true);
 					delta_smoothing_override = true;
-					recognised = true;
+					recognized = true;
 				}
 				if (string == "disable") {
 					OS::get_singleton()->set_delta_smoothing(false);
 					delta_smoothing_override = false;
-					recognised = true;
+					recognized = true;
 				}
-				if (!recognised) {
-					OS::get_singleton()->print("Delta-smoothing argument not recognised, aborting.\n");
+				if (!recognized) {
+					OS::get_singleton()->print("Delta-smoothing argument not recognized, aborting.\n");
 					goto error;
 				}
 				N = I->next()->next();
@@ -1147,6 +1150,9 @@ Error Main::setup(const char *execpath, int argc, char *argv[], bool p_second_ph
 					rtm = OS::RENDER_THREAD_UNSAFE;
 				} else if (I->next()->get() == "separate") {
 					rtm = OS::RENDER_SEPARATE_THREAD;
+				} else {
+					OS::get_singleton()->print("Unknown render thread mode, aborting.\nValid options are 'unsafe', 'safe' and 'separate'.\n");
+					goto error;
 				}
 
 				N = I->next()->next();
@@ -1438,15 +1444,16 @@ Error Main::setup(const char *execpath, int argc, char *argv[], bool p_second_ph
 				goto error;
 			}
 
-		} else if (I->get() == "--startup-benchmark") {
-			use_startup_benchmark = true;
-		} else if (I->get() == "--startup-benchmark-file") {
+		} else if (I->get() == "--benchmark") {
+			OS::get_singleton()->set_use_benchmark(true);
+		} else if (I->get() == "--benchmark-file") {
 			if (I->next()) {
-				use_startup_benchmark = true;
-				startup_benchmark_file = I->next()->get();
+				OS::get_singleton()->set_use_benchmark(true);
+				String benchmark_file = I->next()->get();
+				OS::get_singleton()->set_benchmark_file(benchmark_file);
 				N = I->next()->next();
 			} else {
-				OS::get_singleton()->print("Missing <path> argument for --startup-benchmark-file <path>.\n");
+				OS::get_singleton()->print("Missing <path> argument for --benchmark-file <path>.\n");
 				goto error;
 			}
 
@@ -1643,6 +1650,7 @@ Error Main::setup(const char *execpath, int argc, char *argv[], bool p_second_ph
 		GLOBAL_DEF(PropertyInfo(Variant::STRING, "rendering/gl_compatibility/driver.android", PROPERTY_HINT_ENUM, driver_hints), default_driver);
 		GLOBAL_DEF(PropertyInfo(Variant::STRING, "rendering/gl_compatibility/driver.ios", PROPERTY_HINT_ENUM, driver_hints), default_driver);
 		GLOBAL_DEF(PropertyInfo(Variant::STRING, "rendering/gl_compatibility/driver.macos", PROPERTY_HINT_ENUM, driver_hints), default_driver);
+		GLOBAL_DEF_RST("rendering/gl_compatibility/nvidia_disable_threaded_optimization", true);
 	}
 
 	// Start with RenderingDevice-based backends. Should be included if any RD driver present.
@@ -1870,7 +1878,8 @@ Error Main::setup(const char *execpath, int argc, char *argv[], bool p_second_ph
 	}
 
 	if (rtm >= 0 && rtm < 3) {
-		if (editor) {
+		if (editor || project_manager) {
+			// Editor and project manager cannot run with rendering in a separate thread (they will crash on startup).
 			rtm = OS::RENDER_THREAD_SAFE;
 		}
 		OS::get_singleton()->_render_thread_mode = OS::RenderThreadMode(rtm);
@@ -1987,14 +1996,14 @@ Error Main::setup(const char *execpath, int argc, char *argv[], bool p_second_ph
 
 	message_queue = memnew(MessageQueue);
 
-	engine->startup_benchmark_end_measure(); // core
-
 	Thread::release_main_thread(); // If setup2() is called from another thread, that one will become main thread, so preventively release this one.
+	set_current_thread_safe_for_nodes(false);
 
 	if (p_second_phase) {
 		return setup2();
 	}
 
+	OS::get_singleton()->benchmark_end_measure("core");
 	return OK;
 
 error:
@@ -2047,19 +2056,42 @@ error:
 	if (message_queue) {
 		memdelete(message_queue);
 	}
+
+	OS::get_singleton()->benchmark_end_measure("core");
+
 	OS::get_singleton()->finalize_core();
 	locale = String();
 
 	return exit_code;
 }
 
+Error _parse_resource_dummy(void *p_data, VariantParser::Stream *p_stream, Ref<Resource> &r_res, int &line, String &r_err_str) {
+	VariantParser::Token token;
+	VariantParser::get_token(p_stream, token, line, r_err_str);
+	if (token.type != VariantParser::TK_NUMBER && token.type != VariantParser::TK_STRING) {
+		r_err_str = "Expected number (old style sub-resource index) or String (ext-resource ID)";
+		return ERR_PARSE_ERROR;
+	}
+
+	r_res.unref();
+
+	VariantParser::get_token(p_stream, token, line, r_err_str);
+	if (token.type != VariantParser::TK_PARENTHESIS_CLOSE) {
+		r_err_str = "Expected ')'";
+		return ERR_PARSE_ERROR;
+	}
+
+	return OK;
+}
+
 Error Main::setup2() {
 	Thread::make_main_thread(); // Make whatever thread call this the main thread.
+	set_current_thread_safe_for_nodes(true);
 
 	// Print engine name and version
 	print_line(String(VERSION_NAME) + " v" + get_full_version_string() + " - " + String(VERSION_WEBSITE));
 
-	engine->startup_benchmark_begin_measure("servers");
+	OS::get_singleton()->benchmark_begin_measure("servers");
 
 	tsman = memnew(TextServerManager);
 
@@ -2099,12 +2131,16 @@ Error Main::setup2() {
 					int lines = 0;
 					String error_text;
 
+					VariantParser::ResourceParser rp_new;
+					rp_new.ext_func = _parse_resource_dummy;
+					rp_new.sub_func = _parse_resource_dummy;
+
 					while (true) {
 						assign = Variant();
 						next_tag.fields.clear();
 						next_tag.name = String();
 
-						err = VariantParser::parse_tag_assign_eof(&stream, lines, error_text, next_tag, assign, value, nullptr, true);
+						err = VariantParser::parse_tag_assign_eof(&stream, lines, error_text, next_tag, assign, value, &rp_new, true);
 						if (err == ERR_FILE_EOF) {
 							break;
 						}
@@ -2198,6 +2234,10 @@ Error Main::setup2() {
 				print_line("Requested V-Sync mode: Mailbox");
 				break;
 		}
+	}
+
+	if (OS::get_singleton()->_render_thread_mode == OS::RENDER_SEPARATE_THREAD) {
+		WARN_PRINT("The Multi-Threaded rendering thread model is experimental, and has known issues which can lead to project crashes. Use the Single-Safe option in the project settings instead.");
 	}
 
 	/* Initialize Pen Tablet Driver */
@@ -2450,11 +2490,11 @@ Error Main::setup2() {
 		ERR_FAIL_V_MSG(ERR_CANT_CREATE, "TextServer: Unable to create TextServer interface.");
 	}
 
-	engine->startup_benchmark_end_measure(); // servers
+	OS::get_singleton()->benchmark_end_measure("servers");
 
 	MAIN_PRINT("Main: Load Scene Types");
 
-	engine->startup_benchmark_begin_measure("scene");
+	OS::get_singleton()->benchmark_begin_measure("scene");
 
 	register_scene_types();
 	register_driver_types();
@@ -2539,7 +2579,7 @@ Error Main::setup2() {
 	print_verbose("EDITOR API HASH: " + uitos(ClassDB::get_api_hash(ClassDB::API_EDITOR)));
 	MAIN_PRINT("Main: Done");
 
-	engine->startup_benchmark_end_measure(); // scene
+	OS::get_singleton()->benchmark_end_measure("scene");
 
 	return OK;
 }
@@ -2554,7 +2594,7 @@ static MainTimerSync main_timer_sync;
 bool Main::start() {
 	ERR_FAIL_COND_V(!_start_success, false);
 
-	bool hasicon = false;
+	bool has_icon = false;
 	String positional_arg;
 	String game_path;
 	String script;
@@ -2716,6 +2756,7 @@ bool Main::start() {
 		// Default values should be synced with mono_gd/gd_mono.cpp.
 		GLOBAL_DEF("dotnet/project/assembly_name", "");
 		GLOBAL_DEF("dotnet/project/solution_directory", "");
+		GLOBAL_DEF(PropertyInfo(Variant::INT, "dotnet/project/assembly_reload_attempts", PROPERTY_HINT_RANGE, "1,16,1,or_greater"), 3);
 #endif
 
 		Error err;
@@ -2925,19 +2966,14 @@ bool Main::start() {
 		}
 		if (debug_navigation) {
 			sml->set_debug_navigation_hint(true);
+			NavigationServer3D::get_singleton()->set_debug_navigation_enabled(true);
 		}
 		if (debug_avoidance) {
-			sml->set_debug_avoidance_hint(true);
+			NavigationServer3D::get_singleton()->set_debug_avoidance_enabled(true);
 		}
 		if (debug_navigation || debug_avoidance) {
 			NavigationServer3D::get_singleton()->set_active(true);
 			NavigationServer3D::get_singleton()->set_debug_enabled(true);
-			if (debug_navigation) {
-				NavigationServer3D::get_singleton()->set_debug_navigation_enabled(true);
-			}
-			if (debug_avoidance) {
-				NavigationServer3D::get_singleton()->set_debug_avoidance_enabled(true);
-			}
 		}
 #endif
 
@@ -2957,7 +2993,7 @@ bool Main::start() {
 		if (!project_manager && !editor) { // game
 			if (!game_path.is_empty() || !script.is_empty()) {
 				//autoload
-				Engine::get_singleton()->startup_benchmark_begin_measure("load_autoloads");
+				OS::get_singleton()->benchmark_begin_measure("load_autoloads");
 				HashMap<StringName, ProjectSettings::AutoloadInfo> autoloads = ProjectSettings::get_singleton()->get_autoload_list();
 
 				//first pass, add the constants so they exist before any script is loaded
@@ -3023,14 +3059,14 @@ bool Main::start() {
 				for (Node *E : to_add) {
 					sml->get_root()->add_child(E);
 				}
-				Engine::get_singleton()->startup_benchmark_end_measure(); // load autoloads
+				OS::get_singleton()->benchmark_end_measure("load_autoloads");
 			}
 		}
 
 #ifdef TOOLS_ENABLED
 		EditorNode *editor_node = nullptr;
 		if (editor) {
-			Engine::get_singleton()->startup_benchmark_begin_measure("editor");
+			OS::get_singleton()->benchmark_begin_measure("editor");
 			editor_node = memnew(EditorNode);
 			sml->get_root()->add_child(editor_node);
 
@@ -3039,12 +3075,7 @@ bool Main::start() {
 				game_path = ""; // Do not load anything.
 			}
 
-			Engine::get_singleton()->startup_benchmark_end_measure();
-
-			editor_node->set_use_startup_benchmark(use_startup_benchmark, startup_benchmark_file);
-			// Editor takes over
-			use_startup_benchmark = false;
-			startup_benchmark_file = String();
+			OS::get_singleton()->benchmark_end_measure("editor");
 		}
 #endif
 		sml->set_auto_accept_quit(GLOBAL_GET("application/config/auto_accept_quit"));
@@ -3173,7 +3204,7 @@ bool Main::start() {
 
 		if (!project_manager && !editor) { // game
 
-			Engine::get_singleton()->startup_benchmark_begin_measure("game_load");
+			OS::get_singleton()->benchmark_begin_measure("game_load");
 
 			// Load SSL Certificates from Project Settings (or builtin).
 			Crypto::load_default_certificates(GLOBAL_GET("network/tls/certificate_bundle_override"));
@@ -3189,45 +3220,45 @@ bool Main::start() {
 				sml->add_current_scene(scene);
 
 #ifdef MACOS_ENABLED
-				String mac_iconpath = GLOBAL_GET("application/config/macos_native_icon");
-				if (!mac_iconpath.is_empty()) {
-					DisplayServer::get_singleton()->set_native_icon(mac_iconpath);
-					hasicon = true;
+				String mac_icon_path = GLOBAL_GET("application/config/macos_native_icon");
+				if (!mac_icon_path.is_empty()) {
+					DisplayServer::get_singleton()->set_native_icon(mac_icon_path);
+					has_icon = true;
 				}
 #endif
 
 #ifdef WINDOWS_ENABLED
-				String win_iconpath = GLOBAL_GET("application/config/windows_native_icon");
-				if (!win_iconpath.is_empty()) {
-					DisplayServer::get_singleton()->set_native_icon(win_iconpath);
-					hasicon = true;
+				String win_icon_path = GLOBAL_GET("application/config/windows_native_icon");
+				if (!win_icon_path.is_empty()) {
+					DisplayServer::get_singleton()->set_native_icon(win_icon_path);
+					has_icon = true;
 				}
 #endif
 
-				String iconpath = GLOBAL_GET("application/config/icon");
-				if ((!iconpath.is_empty()) && (!hasicon)) {
+				String icon_path = GLOBAL_GET("application/config/icon");
+				if ((!icon_path.is_empty()) && (!has_icon)) {
 					Ref<Image> icon;
 					icon.instantiate();
-					if (ImageLoader::load_image(iconpath, icon) == OK) {
+					if (ImageLoader::load_image(icon_path, icon) == OK) {
 						DisplayServer::get_singleton()->set_icon(icon);
-						hasicon = true;
+						has_icon = true;
 					}
 				}
 			}
 
-			Engine::get_singleton()->startup_benchmark_end_measure(); // game_load
+			OS::get_singleton()->benchmark_end_measure("game_load");
 		}
 
 #ifdef TOOLS_ENABLED
 		if (project_manager) {
-			Engine::get_singleton()->startup_benchmark_begin_measure("project_manager");
+			OS::get_singleton()->benchmark_begin_measure("project_manager");
 			Engine::get_singleton()->set_editor_hint(true);
 			ProjectManager *pmanager = memnew(ProjectManager);
 			ProgressDialog *progress_dialog = memnew(ProgressDialog);
 			pmanager->add_child(progress_dialog);
 			sml->get_root()->add_child(pmanager);
 			DisplayServer::get_singleton()->set_context(DisplayServer::CONTEXT_PROJECTMAN);
-			Engine::get_singleton()->startup_benchmark_end_measure();
+			OS::get_singleton()->benchmark_end_measure("project_manager");
 		}
 
 		if (project_manager || editor) {
@@ -3238,7 +3269,7 @@ bool Main::start() {
 #endif
 	}
 
-	if (!hasicon && OS::get_singleton()->get_bundle_icon_path().is_empty()) {
+	if (!has_icon && OS::get_singleton()->get_bundle_icon_path().is_empty()) {
 		Ref<Image> icon = memnew(Image(app_icon_png));
 		DisplayServer::get_singleton()->set_icon(icon);
 	}
@@ -3257,10 +3288,8 @@ bool Main::start() {
 		}
 	}
 
-	if (use_startup_benchmark) {
-		Engine::get_singleton()->startup_dump(startup_benchmark_file);
-		startup_benchmark_file = String();
-	}
+	OS::get_singleton()->benchmark_end_measure("startup_begin");
+	OS::get_singleton()->benchmark_dump();
 
 	return true;
 }
@@ -3505,6 +3534,7 @@ void Main::force_redraw() {
  * The order matters as some of those steps are linked with each other.
  */
 void Main::cleanup(bool p_force) {
+	OS::get_singleton()->benchmark_begin_measure("Main::cleanup");
 	if (!p_force) {
 		ERR_FAIL_COND(!_start_success);
 	}
@@ -3644,6 +3674,9 @@ void Main::cleanup(bool p_force) {
 	unregister_core_extensions();
 	uninitialize_modules(MODULE_INITIALIZATION_LEVEL_CORE);
 	unregister_core_types();
+
+	OS::get_singleton()->benchmark_end_measure("Main::cleanup");
+	OS::get_singleton()->benchmark_dump();
 
 	OS::get_singleton()->finalize_core();
 }

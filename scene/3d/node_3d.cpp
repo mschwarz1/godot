@@ -110,7 +110,7 @@ void Node3D::_propagate_transform_changed(Node3D *p_origin) {
 	}
 
 	for (Node3D *&E : data.children) {
-		if (E->data.top_level_active) {
+		if (E->data.top_level) {
 			continue; //don't propagate to a top_level
 		}
 		E->_propagate_transform_changed(p_origin);
@@ -135,7 +135,7 @@ void Node3D::_notification(int p_what) {
 
 	switch (p_what) {
 		case NOTIFICATION_ENTER_TREE: {
-			ERR_FAIL_COND(!get_tree());
+			ERR_FAIL_NULL(get_tree());
 
 			Node *p = get_parent();
 			if (p) {
@@ -153,7 +153,6 @@ void Node3D::_notification(int p_what) {
 					data.local_transform = data.parent->get_global_transform() * get_transform();
 					_replace_dirty_mask(DIRTY_EULER_ROTATION_AND_SCALE); // As local transform was updated, rot/scale should be dirty.
 				}
-				data.top_level_active = true;
 			}
 
 			_set_dirty_bits(DIRTY_GLOBAL_TRANSFORM); // Global is always dirty upon entering a scene.
@@ -173,7 +172,6 @@ void Node3D::_notification(int p_what) {
 			}
 			data.parent = nullptr;
 			data.C = nullptr;
-			data.top_level_active = false;
 			_update_visibility_parent(true);
 		} break;
 
@@ -186,7 +184,7 @@ void Node3D::_notification(int p_what) {
 				parent = parent->get_parent();
 			}
 
-			ERR_FAIL_COND(!data.viewport);
+			ERR_FAIL_NULL(data.viewport);
 
 			if (get_script_instance()) {
 				get_script_instance()->call(SceneStringNames::get_singleton()->_enter_world);
@@ -305,7 +303,7 @@ Quaternion Node3D::get_quaternion() const {
 
 void Node3D::set_global_transform(const Transform3D &p_transform) {
 	ERR_THREAD_GUARD;
-	Transform3D xform = (data.parent && !data.top_level_active)
+	Transform3D xform = (data.parent && !data.top_level)
 			? data.parent->get_global_transform().affine_inverse() * p_transform
 			: p_transform;
 
@@ -337,7 +335,7 @@ Transform3D Node3D::get_global_transform() const {
 		}
 
 		Transform3D new_global;
-		if (data.parent && !data.top_level_active) {
+		if (data.parent && !data.top_level) {
 			new_global = data.parent->get_global_transform() * data.local_transform;
 		} else {
 			new_global = data.local_transform;
@@ -379,7 +377,7 @@ Transform3D Node3D::get_relative_transform(const Node *p_parent) const {
 		return Transform3D();
 	}
 
-	ERR_FAIL_COND_V(!data.parent, Transform3D());
+	ERR_FAIL_NULL_V(data.parent, Transform3D());
 
 	if (p_parent == data.parent) {
 		return get_transform();
@@ -727,12 +725,8 @@ void Node3D::set_as_top_level(bool p_enabled) {
 		} else if (data.parent) {
 			set_transform(data.parent->get_global_transform().affine_inverse() * get_global_transform());
 		}
-
-		data.top_level = p_enabled;
-		data.top_level_active = p_enabled;
-	} else {
-		data.top_level = p_enabled;
 	}
+	data.top_level = p_enabled;
 }
 
 bool Node3D::is_set_as_top_level() const {
@@ -743,7 +737,7 @@ bool Node3D::is_set_as_top_level() const {
 Ref<World3D> Node3D::get_world_3d() const {
 	ERR_READ_THREAD_GUARD_V(Ref<World3D>()); // World3D can only be set from main thread, so it's safe to obtain on threads.
 	ERR_FAIL_COND_V(!is_inside_world(), Ref<World3D>());
-	ERR_FAIL_COND_V(!data.viewport, Ref<World3D>());
+	ERR_FAIL_NULL_V(data.viewport, Ref<World3D>());
 
 	return data.viewport->find_world_3d();
 }
@@ -908,22 +902,23 @@ void Node3D::set_identity() {
 	set_transform(Transform3D());
 }
 
-void Node3D::look_at(const Vector3 &p_target, const Vector3 &p_up) {
+void Node3D::look_at(const Vector3 &p_target, const Vector3 &p_up, bool p_use_model_front) {
 	ERR_THREAD_GUARD;
 	ERR_FAIL_COND_MSG(!is_inside_tree(), "Node not inside tree. Use look_at_from_position() instead.");
 	Vector3 origin = get_global_transform().origin;
-	look_at_from_position(origin, p_target, p_up);
+	look_at_from_position(origin, p_target, p_up, p_use_model_front);
 }
 
-void Node3D::look_at_from_position(const Vector3 &p_pos, const Vector3 &p_target, const Vector3 &p_up) {
+void Node3D::look_at_from_position(const Vector3 &p_pos, const Vector3 &p_target, const Vector3 &p_up, bool p_use_model_front) {
 	ERR_THREAD_GUARD;
 	ERR_FAIL_COND_MSG(p_pos.is_equal_approx(p_target), "Node origin and target are in the same position, look_at() failed.");
 	ERR_FAIL_COND_MSG(p_up.is_zero_approx(), "The up vector can't be zero, look_at() failed.");
 	ERR_FAIL_COND_MSG(p_up.cross(p_target - p_pos).is_zero_approx(), "Up vector and direction between node origin and target are aligned, look_at() failed.");
 
-	Transform3D lookat = Transform3D(Basis::looking_at(p_target - p_pos, p_up), p_pos);
+	Vector3 forward = p_target - p_pos;
+	Basis lookat_basis = Basis::looking_at(forward, p_up, p_use_model_front);
 	Vector3 original_scale = get_scale();
-	set_global_transform(lookat);
+	set_global_transform(Transform3D(lookat_basis, p_pos));
 	set_scale(original_scale);
 }
 
@@ -976,10 +971,10 @@ void Node3D::_update_visibility_parent(bool p_update_root) {
 			return;
 		}
 		Node *parent = get_node_or_null(visibility_parent_path);
-		ERR_FAIL_COND_MSG(!parent, "Can't find visibility parent node at path: " + visibility_parent_path);
+		ERR_FAIL_NULL_MSG(parent, "Can't find visibility parent node at path: " + visibility_parent_path);
 		ERR_FAIL_COND_MSG(parent == this, "The visibility parent can't be the same node.");
 		GeometryInstance3D *gi = Object::cast_to<GeometryInstance3D>(parent);
-		ERR_FAIL_COND_MSG(!gi, "The visibility parent node must be a GeometryInstance3D, at path: " + visibility_parent_path);
+		ERR_FAIL_NULL_MSG(gi, "The visibility parent node must be a GeometryInstance3D, at path: " + visibility_parent_path);
 		new_parent = gi ? gi->get_instance() : RID();
 	} else if (data.parent) {
 		new_parent = data.parent->data.visibility_parent;
@@ -1166,8 +1161,8 @@ void Node3D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("orthonormalize"), &Node3D::orthonormalize);
 	ClassDB::bind_method(D_METHOD("set_identity"), &Node3D::set_identity);
 
-	ClassDB::bind_method(D_METHOD("look_at", "target", "up"), &Node3D::look_at, DEFVAL(Vector3(0, 1, 0)));
-	ClassDB::bind_method(D_METHOD("look_at_from_position", "position", "target", "up"), &Node3D::look_at_from_position, DEFVAL(Vector3(0, 1, 0)));
+	ClassDB::bind_method(D_METHOD("look_at", "target", "up", "use_model_front"), &Node3D::look_at, DEFVAL(Vector3(0, 1, 0)), DEFVAL(false));
+	ClassDB::bind_method(D_METHOD("look_at_from_position", "position", "target", "up", "use_model_front"), &Node3D::look_at_from_position, DEFVAL(Vector3(0, 1, 0)), DEFVAL(false));
 
 	ClassDB::bind_method(D_METHOD("to_local", "global_point"), &Node3D::to_local);
 	ClassDB::bind_method(D_METHOD("to_global", "local_point"), &Node3D::to_global);

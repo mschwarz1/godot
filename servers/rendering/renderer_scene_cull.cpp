@@ -36,7 +36,6 @@
 #include "core/os/os.h"
 // #include "scene/3d/camera_3d.h"
 #include "rendering_server_default.h"
-#include "rendering_server_globals.h"
 
 #include <new>
 
