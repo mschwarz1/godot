@@ -148,7 +148,7 @@ void CSGBrush::convert_manifold_to_brush() {
 	for (int triangle_i = 0; triangle_i < mesh.NumTri(); triangle_i++) {
 		CSGBrush::Face face;
 		for (int32_t face_index_i = 0; face_index_i < VERTICES_IN_TRIANGLE; face_index_i++) {
-			int32_t clockwise_vertex_i = indices[triangle_i * VERTICES_IN_TRIANGLE + face_index_i];
+			int32_t clockwise_vertex_i = indices[triangle_i * mesh.NumTri() + face_index_i];
 			Vector3 pos;
 			pos.x = mesh.vertProperties[clockwise_vertex_i * mesh.numProp + MANIFOLD_PROPERTY_POSITION + 0];
 			pos.y = mesh.vertProperties[clockwise_vertex_i * mesh.numProp + MANIFOLD_PROPERTY_POSITION + 1];
