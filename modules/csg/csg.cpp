@@ -122,37 +122,19 @@ void CSGBrush::build_from_faces(const Vector<Vector3> &p_vertices, const Vector<
 
 void CSGBrush::convert_manifold_to_brush() {
 	manifold::MeshGL mesh = manifold.GetMeshGL();
-	size_t triangle_count = mesh.NumTri();
-	faces.resize(triangle_count);
-	for (size_t triangle_i = 0; triangle_i < triangle_count; triangle_i++) {
-		CSGBrush::Face &face = faces.write[triangle_i];
-		for (int32_t face_vertex_i = 0; face_vertex_i < 3; face_vertex_i++) {
-			constexpr int32_t order[3] = { 2, 1, 0 };
-			size_t mesh_vertex = mesh.triVerts[triangle_i * 3 + order[face_vertex_i]];
-			Vector3 position;
-			for (int32_t i = 0; i < 3; i++) {
-				position[i] = mesh.vertProperties[mesh_vertex * mesh.numProp + MANIFOLD_PROPERTY_POSITION + i];
-			}
-			face.vertices[face_vertex_i] = position;
-			glm::vec3 normal;
-			normal.x = mesh.vertProperties[mesh_vertex * mesh.numProp + MANIFOLD_PROPERTY_NORMAL + 0];
-			normal.y = mesh.vertProperties[mesh_vertex * mesh.numProp + MANIFOLD_PROPERTY_NORMAL + 1];
-			normal.z = mesh.vertProperties[mesh_vertex * mesh.numProp + MANIFOLD_PROPERTY_NORMAL + 2];
-			bool flat = Math::is_equal_approx(normal.x, normal.y) && Math::is_equal_approx(normal.x, normal.z);
-			face.smooth = !flat;
-			face.uvs[order[face_vertex_i]].x = mesh.vertProperties[mesh_vertex * mesh.numProp + MANIFOLD_PROPERTY_UV_X_0 + 0];
-			face.uvs[order[face_vertex_i]].y = mesh.vertProperties[mesh_vertex * mesh.numProp + MANIFOLD_PROPERTY_UV_Y_0 + 0];
-			face.invert = mesh.vertProperties[mesh_vertex * mesh.numProp + MANIFOLD_PROPERTY_INVERT];
-			face.smooth = mesh.vertProperties[mesh_vertex * mesh.numProp + MANIFOLD_PROPERTY_SMOOTH_GROUP];
-			size_t run_index = mesh.runIndex[triangle_i];
-			face.material = mesh.runOriginalID[run_index];
-			Vector<Ref<Material>> triangle_materials = mesh_id_materials[mesh.runOriginalID[triangle_i]];
-			Ref<Material> mat = triangle_materials[run_index];
-			if (materials.find(mat) == -1) {
-				materials.push_back(mat);
-			}
-		}
-	}
+    faces.clear();
+    for (int i = 0; i < mesh.triVerts.size(); i += 3) {
+        CSGBrush::Face face;
+        for (int j = 0; j < 3; ++j) {
+            int32_t vertex_i = mesh.triVerts[i + (2 - j)];
+            Vector3 pos;
+            pos.x = mesh.vertProperties[vertex_i * mesh.numProp + MANIFOLD_PROPERTY_POSITION];
+            pos.y = mesh.vertProperties[vertex_i * mesh.numProp + MANIFOLD_PROPERTY_POSITION + 1];
+            pos.z = mesh.vertProperties[vertex_i * mesh.numProp + MANIFOLD_PROPERTY_POSITION + 2];
+            face.vertices[j] = pos;
+        }
+        faces.push_back(face);
+    }
 	_regen_face_aabbs();
 }
 
@@ -165,10 +147,8 @@ void CSGBrush::create_manifold() {
 	st.instantiate();
 	st->begin(Mesh::PRIMITIVE_TRIANGLES);
 	for (const CSGBrush::Face &face : faces) {
-		for (int32_t vertex_i = 2; vertex_i >= 0; vertex_i--) {
+        for (int32_t vertex_i = 2; vertex_i >= 0; vertex_i--) {
 			st->set_smooth_group(face.smooth);
-			Vector2 uvs = face.uvs[vertex_i];
-			st->set_uv(Vector2(uvs.x, uvs.y));
 			int32_t mat_id = face.material;
 			if (mat_id == -1 || mat_id >= materials.size()) {
 				st->set_material(Ref<Material>());
@@ -186,38 +166,22 @@ void CSGBrush::create_manifold() {
 	mesh.numProp = MANIFOLD_PROPERTY_MAX;
 	const int32_t VERTICES_IN_TRIANGLE = 3;
 	int32_t number_of_triangles = mdt->get_face_count();
-	mesh.triVerts.resize(number_of_triangles * VERTICES_IN_TRIANGLE);
+	mesh.triVerts.resize(number_of_triangles * MANIFOLD_PROPERTY_MAX);
+
+	for (int i = 0; i < number_of_triangles; ++i) {
+		for (int j = 0; j < VERTICES_IN_TRIANGLE; ++j) {
+			mesh.triVerts[i * VERTICES_IN_TRIANGLE + j] = mdt->get_face_vertex(i, j);
+		}
+	}
+
 	mesh.vertProperties.resize(number_of_triangles * VERTICES_IN_TRIANGLE * mesh.numProp);
-	for (int triangle_i = 0; triangle_i < mdt->get_face_count(); triangle_i++) {
-		for (int32_t face_index_i = 0; face_index_i < VERTICES_IN_TRIANGLE; face_index_i++) {
-			size_t vertex_index = mdt->get_face_vertex(triangle_i, face_index_i);
-			mesh.triVerts[triangle_i * VERTICES_IN_TRIANGLE + face_index_i] = vertex_index;
-		}
-	}
 	for (int triangle_i = 0; triangle_i < number_of_triangles; triangle_i++) {
 		for (int32_t face_index_i = 0; face_index_i < VERTICES_IN_TRIANGLE; face_index_i++) {
-			int32_t vertex_i = mdt->get_face_vertex(triangle_i, face_index_i);
-			Vector3 pos = mdt->get_vertex(vertex_i);
-			mesh.vertProperties[triangle_i * mesh.numProp + MANIFOLD_PROPERTY_POSITION + face_index_i] = pos[face_index_i];
-		}
-	}
-	for (int triangle_i = 0; triangle_i < number_of_triangles; triangle_i++) {
-		for (int32_t face_index_i = 0; face_index_i < VERTICES_IN_TRIANGLE; face_index_i++) {
-			int32_t vertex_i = mdt->get_face_vertex(triangle_i, face_index_i);
-			Vector3 normal = -mdt->get_vertex_normal(vertex_i);
-			mesh.vertProperties[triangle_i * mesh.numProp + MANIFOLD_PROPERTY_NORMAL + 0] = normal.x;
-			mesh.vertProperties[triangle_i * mesh.numProp + MANIFOLD_PROPERTY_NORMAL + 1] = normal.y;
-			mesh.vertProperties[triangle_i * mesh.numProp + MANIFOLD_PROPERTY_NORMAL + 2] = normal.z;
-			Ref<Material> mat = mdt->get_material();
-			int32_t material_id = materials.find(mat);
-			if (material_id == -1) {
-				material_id = materials.size();
-				materials.push_back(mat);
-			}
-			mesh.vertProperties[vertex_i * mesh.numProp + MANIFOLD_PROPERTY_MATERIAL] = material_id;
-			Vector2 uv = mdt->get_vertex_uv(vertex_i);
-			mesh.vertProperties[triangle_i * mesh.numProp + MANIFOLD_PROPERTY_UV_X_0] = uv.x;
-			mesh.vertProperties[triangle_i * mesh.numProp + MANIFOLD_PROPERTY_UV_Y_0] = uv.y;
+			int32_t vertex = mdt->get_face_vertex(triangle_i, face_index_i);;
+			Vector3 pos = mdt->get_vertex(vertex);
+			mesh.vertProperties[triangle_i * VERTICES_IN_TRIANGLE * mesh.numProp + face_index_i * mesh.numProp + MANIFOLD_PROPERTY_POSITION] = pos.x;
+			mesh.vertProperties[triangle_i * VERTICES_IN_TRIANGLE * mesh.numProp + face_index_i * mesh.numProp + MANIFOLD_PROPERTY_POSITION + 1] = pos.y;
+			mesh.vertProperties[triangle_i * VERTICES_IN_TRIANGLE * mesh.numProp + face_index_i * mesh.numProp + MANIFOLD_PROPERTY_POSITION + 2] = pos.z;
 		}
 	}
 	manifold = manifold::Manifold(mesh);
