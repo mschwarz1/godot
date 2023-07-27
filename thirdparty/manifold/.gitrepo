@@ -1,0 +1,12 @@
+; DO NOT EDIT (unless you know what you are doing)
+;
+; This subdirectory is a git "subrepo", and this file is maintained by the
+; git-subrepo command. See https://github.com/ingydotnet/git-subrepo#readme
+;
+[subrepo]
+	remote = https://github.com/elalish/manifold.git
+	branch = master
+	commit = 5f9b484b6ca9186e9edcf4ecc6bc9a5e2ff21da6
+	parent = 7370f70883a79aa64fdf7b73b6da075a303d0d2d
+	method = merge
+	cmdver = 0.4.6
