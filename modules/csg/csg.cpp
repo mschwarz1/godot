@@ -134,23 +134,23 @@ void CSGBrush::convert_manifold_to_brush() {
 				position[i] = mesh.vertProperties[mesh_vertex * mesh.numProp + MANIFOLD_PROPERTY_POSITION + i];
 			}
 			face.vertices[face_vertex_i] = position;
-			//glm::vec3 normal;
-			//normal.x = mesh.vertProperties[vertex_i * mesh.numProp + MANIFOLD_PROPERTY_NORMAL + 0];
-			//normal.y = mesh.vertProperties[vertex_i * mesh.numProp + MANIFOLD_PROPERTY_NORMAL + 1];
-			//normal.z = mesh.vertProperties[vertex_i * mesh.numProp + MANIFOLD_PROPERTY_NORMAL + 2];
-			//bool flat = Math::is_equal_approx(normal.x, normal.y) && Math::is_equal_approx(normal.x, normal.z);
-			//face.smooth = !flat;
-			//face.uvs[order[face_vertex_i]].x = mesh.vertProperties[vertex_i * mesh.numProp + MANIFOLD_PROPERTY_UV_X_0 + 0];
-			//face.uvs[order[face_vertex_i]].y = mesh.vertProperties[vertex_i * mesh.numProp + MANIFOLD_PROPERTY_UV_Y_0 + 0];
-			//face.invert = mesh.vertProperties[vertex_i * mesh.numProp + MANIFOLD_PROPERTY_INVERT];
-			//face.smooth = mesh.vertProperties[vertex_i * mesh.numProp + MANIFOLD_PROPERTY_SMOOTH_GROUP];
-			//size_t run_index = mesh.runIndex[vertex_i];
-			// face.material = mesh.runIndex[triangle_i];
-			// Vector<Ref<Material>> triangle_materials = mesh_id_materials[mesh.originalID[triangle_i]];
-			// Ref<Material> mat = triangle_materials[run_index];
-			// if (materials.find(mat) == -1) {
-			// 	materials.push_back(mat);
-			// }
+			glm::vec3 normal;
+			normal.x = mesh.vertProperties[mesh_vertex * mesh.numProp + MANIFOLD_PROPERTY_NORMAL + 0];
+			normal.y = mesh.vertProperties[mesh_vertex * mesh.numProp + MANIFOLD_PROPERTY_NORMAL + 1];
+			normal.z = mesh.vertProperties[mesh_vertex * mesh.numProp + MANIFOLD_PROPERTY_NORMAL + 2];
+			bool flat = Math::is_equal_approx(normal.x, normal.y) && Math::is_equal_approx(normal.x, normal.z);
+			face.smooth = !flat;
+			face.uvs[order[face_vertex_i]].x = mesh.vertProperties[mesh_vertex * mesh.numProp + MANIFOLD_PROPERTY_UV_X_0 + 0];
+			face.uvs[order[face_vertex_i]].y = mesh.vertProperties[mesh_vertex * mesh.numProp + MANIFOLD_PROPERTY_UV_Y_0 + 0];
+			face.invert = mesh.vertProperties[mesh_vertex * mesh.numProp + MANIFOLD_PROPERTY_INVERT];
+			face.smooth = mesh.vertProperties[mesh_vertex * mesh.numProp + MANIFOLD_PROPERTY_SMOOTH_GROUP];
+			size_t run_index = mesh.runIndex[triangle_i];
+			face.material = mesh.runOriginalID[run_index];
+			Vector<Ref<Material>> triangle_materials = mesh_id_materials[mesh.runOriginalID[triangle_i]];
+			Ref<Material> mat = triangle_materials[run_index];
+			if (materials.find(mat) == -1) {
+				materials.push_back(mat);
+			}
 		}
 	}
 	_regen_face_aabbs();
@@ -215,21 +215,26 @@ void CSGBrush::create_manifold() {
 			mesh.vertProperties[triangle_i * mesh.numProp + MANIFOLD_PROPERTY_NORMAL + 0] = normal.x;
 			mesh.vertProperties[triangle_i * mesh.numProp + MANIFOLD_PROPERTY_NORMAL + 1] = normal.y;
 			mesh.vertProperties[triangle_i * mesh.numProp + MANIFOLD_PROPERTY_NORMAL + 2] = normal.z;
-			//Plane tangent = mdt->get_vertex_tangent(vertex_i);
-			//mesh.halfedgeTangent[vertex_i * 4 + 0] = tangent.normal.x;
-			//mesh.halfedgeTangent[vertex_i * 4 + 1] = tangent.normal.y;
-			//mesh.halfedgeTangent[vertex_i * 4 + 2] = tangent.normal.z;
-			//mesh.halfedgeTangent[vertex_i * 4 + 3] = tangent.d;
-			//mesh.vertProperties[vertex_i * mesh.numProp + MANIFOLD_PROPERTY_MATERIAL] = mdt->get_material();
+			Plane tangent = mdt->get_vertex_tangent(vertex_i);
+			mesh.halfedgeTangent[vertex_i * 4 + 0] = tangent.normal.x;
+			mesh.halfedgeTangent[vertex_i * 4 + 1] = tangent.normal.y;
+			mesh.halfedgeTangent[vertex_i * 4 + 2] = tangent.normal.z;
+			mesh.halfedgeTangent[vertex_i * 4 + 3] = tangent.d;
+			Ref<Material> mat = mdt->get_material();
+			int32_t material_id = materials.find(mat);
+			if (material_id == -1) {
+				material_id = materials.size();
+				materials.push_back(mat);
+			}
+			mesh.vertProperties[vertex_i * mesh.numProp + MANIFOLD_PROPERTY_MATERIAL] = material_id;
 			Vector2 uv = mdt->get_vertex_uv(vertex_i);
 			mesh.vertProperties[triangle_i * mesh.numProp + MANIFOLD_PROPERTY_UV_X_0] = uv.x;
 			mesh.vertProperties[triangle_i * mesh.numProp + MANIFOLD_PROPERTY_UV_Y_0] = uv.y;
-			//if (material_id != -1) {
-			//	vertex_material[triangle_i * face_count + face_index_i] = materials[material_id];
-			//} else {
-			//	vertex_material[triangle_i * face_count + face_index_i] = Ref<Material>();
-			//}
-			// triangle_material.write[triangle_i] = material_id;
+			if (material_id != -1) {
+				vertex_material[triangle_i * number_of_triangles + face_index_i] = materials[material_id];
+			} else {
+				vertex_material[triangle_i * number_of_triangles + face_index_i] = Ref<Material>();
+			}
 		}
 	}
 	manifold = manifold::Manifold(mesh);
