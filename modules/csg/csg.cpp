@@ -121,20 +121,27 @@ void CSGBrush::build_from_faces(const Vector<Vector3> &p_vertices, const Vector<
 }
 
 void CSGBrush::convert_manifold_to_brush() {
+	manifold::Manifold::Error error = manifold.Status();
+	if (error != manifold::Manifold::Error::NoError) {
+		print_line(vformat("Cannot convert brush error %d", int(error)));
+		_regen_face_aabbs();
+		return;
+	}
 	manifold::MeshGL mesh = manifold.GetMeshGL();
-    faces.clear();
-    for (int i = 0; i < mesh.triVerts.size(); i += 3) {
-        CSGBrush::Face face;
-        for (int j = 0; j < 3; ++j) {
-            int32_t vertex_i = mesh.triVerts[i + (2 - j)];
-            Vector3 pos;
-            pos.x = mesh.vertProperties[vertex_i * mesh.numProp + MANIFOLD_PROPERTY_POSITION];
-            pos.y = mesh.vertProperties[vertex_i * mesh.numProp + MANIFOLD_PROPERTY_POSITION + 1];
-            pos.z = mesh.vertProperties[vertex_i * mesh.numProp + MANIFOLD_PROPERTY_POSITION + 2];
-            face.vertices[j] = pos;
-        }
-        faces.push_back(face);
-    }
+	faces.clear();
+	constexpr int VERTICES_IN_TRIANGLE = 3;
+	for (int triangle_i = 0; triangle_i < mesh.NumTri(); triangle_i++) {
+		CSGBrush::Face face;
+		for (int32_t face_index_i = 0; face_index_i < VERTICES_IN_TRIANGLE; face_index_i++) {
+			Vector3 pos;
+			pos.x = mesh.vertProperties[triangle_i * VERTICES_IN_TRIANGLE * mesh.numProp + face_index_i * mesh.numProp + MANIFOLD_PROPERTY_POSITION];
+			pos.y = mesh.vertProperties[triangle_i * VERTICES_IN_TRIANGLE * mesh.numProp + face_index_i * mesh.numProp + MANIFOLD_PROPERTY_POSITION + 1];
+			pos.z = mesh.vertProperties[triangle_i * VERTICES_IN_TRIANGLE * mesh.numProp + face_index_i * mesh.numProp + MANIFOLD_PROPERTY_POSITION + 2];
+
+			face.vertices[face_index_i] = pos;
+		}
+		faces.push_back(face);
+	}
 	_regen_face_aabbs();
 }
 
@@ -147,7 +154,7 @@ void CSGBrush::create_manifold() {
 	st.instantiate();
 	st->begin(Mesh::PRIMITIVE_TRIANGLES);
 	for (const CSGBrush::Face &face : faces) {
-        for (int32_t vertex_i = 2; vertex_i >= 0; vertex_i--) {
+		for (int32_t vertex_i = 2; vertex_i >= 0; vertex_i--) {
 			st->set_smooth_group(face.smooth);
 			int32_t mat_id = face.material;
 			if (mat_id == -1 || mat_id >= materials.size()) {
@@ -177,7 +184,7 @@ void CSGBrush::create_manifold() {
 	mesh.vertProperties.resize(number_of_triangles * VERTICES_IN_TRIANGLE * mesh.numProp);
 	for (int triangle_i = 0; triangle_i < number_of_triangles; triangle_i++) {
 		for (int32_t face_index_i = 0; face_index_i < VERTICES_IN_TRIANGLE; face_index_i++) {
-			int32_t vertex = mdt->get_face_vertex(triangle_i, face_index_i);;
+			int32_t vertex = mdt->get_face_vertex(triangle_i, face_index_i);
 			Vector3 pos = mdt->get_vertex(vertex);
 			mesh.vertProperties[triangle_i * VERTICES_IN_TRIANGLE * mesh.numProp + face_index_i * mesh.numProp + MANIFOLD_PROPERTY_POSITION] = pos.x;
 			mesh.vertProperties[triangle_i * VERTICES_IN_TRIANGLE * mesh.numProp + face_index_i * mesh.numProp + MANIFOLD_PROPERTY_POSITION + 1] = pos.y;
