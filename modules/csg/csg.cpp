@@ -165,7 +165,7 @@ void CSGBrush::create_manifold() {
 	st.instantiate();
 	st->begin(Mesh::PRIMITIVE_TRIANGLES);
 	for (const CSGBrush::Face &face : faces) {
-		for (int32_t vertex_i = 0; vertex_i < 3; vertex_i++) {
+		for (int32_t vertex_i = 2; vertex_i >= 0; vertex_i--) {
 			st->set_smooth_group(face.smooth);
 			Vector2 uvs = face.uvs[vertex_i];
 			st->set_uv(Vector2(uvs.x, uvs.y));
@@ -180,32 +180,25 @@ void CSGBrush::create_manifold() {
 	}
 	Ref<MeshDataTool> mdt;
 	mdt.instantiate();
+	st->index();
 	mdt->create_from_surface(st->commit(), 0);
-	manifold::MeshGL mesh;
-	// Vector<Ref<Material>> triangle_material;
-	// triangle_material.resize(face_count);
-	// triangle_material.fill(Ref<Material>());
+	mesh = manifold::MeshGL();
 	mesh.numProp = MANIFOLD_PROPERTY_MAX;
 	const int32_t VERTICES_IN_TRIANGLE = 3;
 	int32_t number_of_triangles = mdt->get_face_count();
 	mesh.triVerts.resize(number_of_triangles * VERTICES_IN_TRIANGLE);
-	mesh.vertProperties.resize(number_of_triangles * mesh.numProp);
-	//mesh.halfedgeTangent.resize(mesh.NumVert() * 4);
-	HashMap<int32_t, Ref<Material>> vertex_material;
-	//int32_t material_id = materials.find(mdt->get_material());
+	mesh.vertProperties.resize(number_of_triangles * VERTICES_IN_TRIANGLE * mesh.numProp);
 	for (int triangle_i = 0; triangle_i < mdt->get_face_count(); triangle_i++) {
 		for (int32_t face_index_i = 0; face_index_i < VERTICES_IN_TRIANGLE; face_index_i++) {
 			size_t vertex_index = mdt->get_face_vertex(triangle_i, face_index_i);
-			mesh.triVerts[triangle_i * VERTICES_IN_TRIANGLE + MANIFOLD_PROPERTY_POSITION + face_index_i] = vertex_index;
+			mesh.triVerts[triangle_i * VERTICES_IN_TRIANGLE + face_index_i] = vertex_index;
 		}
-		SWAP(mesh.triVerts[triangle_i * VERTICES_IN_TRIANGLE + MANIFOLD_PROPERTY_POSITION + 0], mesh.triVerts[triangle_i * VERTICES_IN_TRIANGLE + MANIFOLD_PROPERTY_POSITION + 2]);
 	}
-	// Swap around indices, convert cw to ccw for the front face.
 	for (int triangle_i = 0; triangle_i < number_of_triangles; triangle_i++) {
 		for (int32_t face_index_i = 0; face_index_i < VERTICES_IN_TRIANGLE; face_index_i++) {
 			int32_t vertex_i = mdt->get_face_vertex(triangle_i, face_index_i);
 			Vector3 pos = mdt->get_vertex(vertex_i);
-			mesh.vertProperties[vertex_i * mesh.numProp + face_index_i] = pos[face_index_i];
+			mesh.vertProperties[triangle_i * mesh.numProp + MANIFOLD_PROPERTY_POSITION + face_index_i] = pos[face_index_i];
 		}
 	}
 	for (int triangle_i = 0; triangle_i < number_of_triangles; triangle_i++) {
@@ -215,11 +208,6 @@ void CSGBrush::create_manifold() {
 			mesh.vertProperties[triangle_i * mesh.numProp + MANIFOLD_PROPERTY_NORMAL + 0] = normal.x;
 			mesh.vertProperties[triangle_i * mesh.numProp + MANIFOLD_PROPERTY_NORMAL + 1] = normal.y;
 			mesh.vertProperties[triangle_i * mesh.numProp + MANIFOLD_PROPERTY_NORMAL + 2] = normal.z;
-			Plane tangent = mdt->get_vertex_tangent(vertex_i);
-			mesh.halfedgeTangent[vertex_i * 4 + 0] = tangent.normal.x;
-			mesh.halfedgeTangent[vertex_i * 4 + 1] = tangent.normal.y;
-			mesh.halfedgeTangent[vertex_i * 4 + 2] = tangent.normal.z;
-			mesh.halfedgeTangent[vertex_i * 4 + 3] = tangent.d;
 			Ref<Material> mat = mdt->get_material();
 			int32_t material_id = materials.find(mat);
 			if (material_id == -1) {
@@ -230,11 +218,6 @@ void CSGBrush::create_manifold() {
 			Vector2 uv = mdt->get_vertex_uv(vertex_i);
 			mesh.vertProperties[triangle_i * mesh.numProp + MANIFOLD_PROPERTY_UV_X_0] = uv.x;
 			mesh.vertProperties[triangle_i * mesh.numProp + MANIFOLD_PROPERTY_UV_Y_0] = uv.y;
-			if (material_id != -1) {
-				vertex_material[triangle_i * number_of_triangles + face_index_i] = materials[material_id];
-			} else {
-				vertex_material[triangle_i * number_of_triangles + face_index_i] = Ref<Material>();
-			}
 		}
 	}
 	manifold = manifold::Manifold(mesh);

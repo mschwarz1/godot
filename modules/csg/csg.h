@@ -68,6 +68,7 @@ struct CSGBrush {
 		RunIndexWrongLength,
 		FaceIDWrongLength,
 	};
+	manifold::MeshGL mesh = manifold::MeshGL();
 	CSGBrush() { }
 	CSGBrush(CSGBrush &p_brush, const Transform3D &p_xform) {
 		faces = p_brush.faces;
