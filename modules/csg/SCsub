@@ -41,6 +41,8 @@ env_csg.Append(LINKFLAGS=["-fno-duplicated-branches"])
 thirdparty_sources = [thirdparty_dir + file for file in thirdparty_sources]
 env_csg.Prepend(
     CPPPATH=[
+        "#thirdparty/manifold/src/manifold/include",
+        "#thirdparty/quickhull",
         "#thirdparty/manifold/src/utilities/include"
         "#thirdparty/manifold/src/manifold/include",
         "#thirdparty/manifold/src/cross_section/include",
