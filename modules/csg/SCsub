@@ -28,9 +28,6 @@ thirdparty_sources = [
     "src/polygon/src/polygon.cpp",
     "src/utilities/src/detect_cuda.cpp",
     "src/third_party/graphlite/src/connected_components.cpp",
-    "src/third_party/clipper2/CPP/Clipper2Lib/src/clipper.engine.cpp",
-    "src/third_party/clipper2/CPP/Clipper2Lib/src/clipper.offset.cpp",
-    "src/third_party/clipper2/CPP/Clipper2Lib/src/clipper.rectclip.cpp",
 ]
 
 env_csg.Prepend(CPPPATH=["#thirdparty/glm"])
@@ -39,13 +36,19 @@ env_csg.Append(CPPDEFINES=["THRUST_DEVICE_SYSTEM=THRUST_DEVICE_SYSTEM_CPP"])
 env_csg.Append(LINKFLAGS=["-fno-exceptions"])
 env_csg.Append(LINKFLAGS=["-fno-duplicated-branches"])
 thirdparty_sources = [thirdparty_dir + file for file in thirdparty_sources]
+thirdparty_sources = thirdparty_sources + [
+    "#thirdparty/clipper2/CPP/Clipper2Lib/src/clipper.engine.cpp",
+    "#thirdparty/clipper2/CPP/Clipper2Lib/src/clipper.offset.cpp",
+    "#thirdparty/clipper2/CPP/Clipper2Lib/src/clipper.rectclip.cpp",
+] + ["#thirdparty/quickhull/QuickHull.cpp"]
 env_csg.Prepend(
     CPPPATH=[
+        "#thirdparty/clipper2/CPP/Clipper2Lib/include",
+        "#thirdparty/manifold/src/cross_section/include",
         "#thirdparty/manifold/src/manifold/include",
         "#thirdparty/quickhull",
         "#thirdparty/manifold/src/utilities/include"
         "#thirdparty/manifold/src/manifold/include",
-        "#thirdparty/manifold/src/cross_section/include",
         "#thirdparty/manifold/src/polygon/include",
         "#thirdparty/manifold/src/utilities/include",
         "#thirdparty/manifold/src/collider/include",

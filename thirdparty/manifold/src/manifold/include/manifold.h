@@ -16,8 +16,8 @@
 #include <functional>
 #include <memory>
 
-#include "cross_section.h"
-#include "public.h"
+#include "thirdparty/manifold/src/cross_section/include/cross_section.h"
+#include "thirdparty/manifold/src/utilities/include/public.h"
 
 namespace manifold {
 

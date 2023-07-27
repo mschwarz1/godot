@@ -14,16 +14,16 @@
 
 #pragma once
 
-#include <clipper2/clipper.h>
+#include <thirdparty/clipper2/CPP/Clipper2Lib/include/clipper2/clipper.h>
 
 #include <memory>
 #include <vector>
 
-#include "clipper2/clipper.core.h"
-#include "clipper2/clipper.offset.h"
-#include "glm/ext/matrix_float3x2.hpp"
-#include "glm/ext/vector_float2.hpp"
-#include "public.h"
+#include "thirdparty/clipper2/CPP/Clipper2Lib/include/clipper2/clipper.core.h"
+#include "thirdparty/clipper2/CPP/Clipper2Lib/include/clipper2/clipper.offset.h"
+#include "thirdparty/glm/glm/ext/matrix_float3x2.hpp"
+#include "thirdparty/glm/glm/ext/vector_float2.hpp"
+#include "../../../src/utilities/include/public.h"
 
 namespace C2 = Clipper2Lib;
 

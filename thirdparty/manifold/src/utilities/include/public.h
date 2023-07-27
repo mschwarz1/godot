@@ -14,11 +14,11 @@
 
 #pragma once
 #define GLM_FORCE_EXPLICIT_CTOR
-#include <glm/ext/matrix_transform.hpp>
-#include <glm/glm.hpp>
-#include <glm/gtc/constants.hpp>
-#include <glm/gtx/compatibility.hpp>
-#include <glm/gtx/rotate_vector.hpp>
+#include <thirdparty/glm/glm/ext/matrix_transform.hpp>
+#include <thirdparty/glm/glm/glm.hpp>
+#include <thirdparty/glm/glm/gtc/constants.hpp>
+#include <thirdparty/glm/glm/gtx/compatibility.hpp>
+#include <thirdparty/glm/glm/gtx/rotate_vector.hpp>
 #include <limits>
 #include <memory>
 #include <unordered_map>
