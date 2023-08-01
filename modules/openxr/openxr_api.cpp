@@ -1864,9 +1864,17 @@ void OpenXRAPI::end_frame() {
 	if (!running) {
 		return;
 	}
-
+	static bool silence = false;
 	if (frame_state.shouldRender && view_pose_valid && !swapchains[OPENXR_SWAPCHAIN_COLOR].image_acquired) {
-		print_line("OpenXR: No viewport was marked with use_xr, there is no rendered output!");
+		if (!silence)
+		{
+			print_line("OpenXR: No viewport was marked with use_xr, there is no rendered output!");
+			silence = true;
+		}
+	}
+	else
+	{
+		silence = false;
 	}
 
 	// must have:

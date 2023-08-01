@@ -261,6 +261,15 @@ bool BoneAttachment3D::get_override_pose() const {
 	return override_pose;
 }
 
+void BoneAttachment3D::set_ignore_scale(bool p_ignore_scale) {
+	ignore_scale = p_ignore_scale;
+	notify_property_list_changed();
+}
+
+bool BoneAttachment3D::get_ignore_scale() const {
+	return ignore_scale;
+}
+
 void BoneAttachment3D::set_use_external_skeleton(bool p_use_external) {
 	use_external_skeleton = p_use_external;
 
@@ -319,9 +328,31 @@ void BoneAttachment3D::on_bone_pose_update(int p_bone_index) {
 		if (sk) {
 			if (!override_pose) {
 				if (use_external_skeleton) {
-					set_global_transform(sk->get_global_transform() * sk->get_bone_global_pose(bone_idx));
+					if (!ignore_scale) {
+						set_global_transform(sk->get_global_transform() * sk->get_bone_global_pose(bone_idx));
+					} else {
+						Transform3D bone_trans = Transform3D();
+						bone_trans.basis = (sk->get_global_transform() * sk->get_bone_global_pose(bone_idx)).get_basis();
+						Vector3 original_scale = bone_trans.basis.get_scale();
+						Vector3 inverse_scale = Vector3(1.0 / original_scale.x, 1.0 / original_scale.y, 1.0 / original_scale.z);
+						bone_trans.basis.scale(inverse_scale);
+						bone_trans.basis.orthogonalize();
+						bone_trans.origin = (sk->get_global_transform() * sk->get_bone_global_pose(bone_idx)).origin;
+						set_global_transform(bone_trans);
+					}
 				} else {
-					set_transform(sk->get_bone_global_pose(bone_idx));
+					if (!ignore_scale) {
+						set_transform(sk->get_bone_global_pose(bone_idx));
+					} else {
+						Transform3D bone_trans = Transform3D();
+						bone_trans.basis = (sk->get_global_transform() * sk->get_bone_global_pose(bone_idx)).get_basis();
+						Vector3 original_scale = bone_trans.basis.get_scale();
+						Vector3 inverse_scale = Vector3(1.0 / original_scale.x, 1.0 / original_scale.y, 1.0 / original_scale.z);
+						bone_trans.basis.scale(inverse_scale);
+						bone_trans.basis.orthogonalize();
+						bone_trans.origin = (sk->get_global_transform() * sk->get_bone_global_pose(bone_idx)).origin;
+						set_global_transform(bone_trans);
+					}
 				}
 			} else {
 				if (!_override_dirty) {
@@ -366,6 +397,9 @@ void BoneAttachment3D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("set_override_pose", "override_pose"), &BoneAttachment3D::set_override_pose);
 	ClassDB::bind_method(D_METHOD("get_override_pose"), &BoneAttachment3D::get_override_pose);
 
+	ClassDB::bind_method(D_METHOD("set_ignore_scale", "ignore_scale"), &BoneAttachment3D::set_ignore_scale);
+	ClassDB::bind_method(D_METHOD("get_ignore_scale"), &BoneAttachment3D::get_ignore_scale);
+
 	ClassDB::bind_method(D_METHOD("set_use_external_skeleton", "use_external_skeleton"), &BoneAttachment3D::set_use_external_skeleton);
 	ClassDB::bind_method(D_METHOD("get_use_external_skeleton"), &BoneAttachment3D::get_use_external_skeleton);
 	ClassDB::bind_method(D_METHOD("set_external_skeleton", "external_skeleton"), &BoneAttachment3D::set_external_skeleton);
@@ -377,4 +411,5 @@ void BoneAttachment3D::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::STRING_NAME, "bone_name"), "set_bone_name", "get_bone_name");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "bone_idx"), "set_bone_idx", "get_bone_idx");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "override_pose"), "set_override_pose", "get_override_pose");
+	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "ignore_scale"), "set_ignore_scale", "get_ignore_scale");
 }

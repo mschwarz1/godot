@@ -281,11 +281,38 @@ void FabrikInverseKinematic::solve(Task *p_task, real_t blending_delta, bool ove
 	solve_simple(p_task, false, origin_pos);
 
 	// Assign new bone position.
+	Vector3 final_pos = Vector3();
+	Vector3 prev_pos = Vector3();
+	real_t total_distance = 0.0;
 	ChainItem *ci(&p_task->chain.chain_root);
-	while (ci) {
-		Transform3D new_bone_pose(ci->initial_transform);
-		new_bone_pose.origin = ci->current_pos;
+	real_t distance_to_goal = (p_task->skeleton->get_global_transform() * p_task->skeleton->get_bone_global_pose(ci->bone)).origin.distance_to(p_task->goal_global_transform.origin);
+	real_t total_bone_length = 0.0;
+	while (ci)
+	{
+		Transform3D bone_global = p_task->skeleton->get_global_transform() * p_task->skeleton->get_bone_global_pose_no_override(ci->bone);
+		if (!ci->children.is_empty()) {
+			ci = &ci->children.write[0];
+			Transform3D next_bone_trans = p_task->skeleton->get_global_transform() * p_task->skeleton->get_bone_global_pose_no_override(ci->bone);
+			total_bone_length += bone_global.origin.distance_to(next_bone_trans.origin);
+		}
+		else{
+			ci = nullptr;
+		}
 
+	}
+	
+	ci = &p_task->chain.chain_root;
+	real_t estimated_distance = MAX(0.0, distance_to_goal - total_bone_length);
+
+	//printf("Estimated distance: %f\n", estimated_distance);
+	real_t needed_length = MIN(estimated_distance + total_bone_length, .5 + total_bone_length);
+	real_t stretched_scale = ((needed_length / total_bone_length));
+	Vector3 prev_origin = ci->current_pos;
+	Vector3 prev_origin_unscaled = ci->current_pos;
+
+	while (ci) {
+		Transform3D new_bone_pose(ci->initial_transform);		
+		new_bone_pose.origin = ci->current_pos;
 		if (!ci->children.is_empty()) {
 			Vector3 forward_vector = (ci->children[0].initial_transform.origin - ci->initial_transform.origin).normalized();
 			// Rotate the bone towards the next bone in the chain:
@@ -302,16 +329,69 @@ void FabrikInverseKinematic::solve(Task *p_task, real_t blending_delta, bool ove
 
 		// IK should not affect scale, so undo any scaling
 		new_bone_pose.basis.orthonormalize();
-		new_bone_pose.basis.scale(p_task->skeleton->get_bone_global_pose(ci->bone).basis.get_scale());
+		new_bone_pose.basis.scale(p_task->skeleton->get_bone_global_pose_no_override(ci->bone).basis.get_scale());
+		Vector3 origin = new_bone_pose.origin;
+		new_bone_pose.scale(Vector3(stretched_scale,stretched_scale,stretched_scale));
+		//new_bone_pose.origin = origin;
+		Vector3 delta_pos = origin - prev_origin_unscaled;
+		new_bone_pose.origin = delta_pos * stretched_scale + prev_origin;
+		prev_origin = new_bone_pose.origin;
+		prev_origin_unscaled = origin;
 
 		p_task->skeleton->set_bone_global_pose_override(ci->bone, new_bone_pose, 1.0, true);
-
+		final_pos = (p_task->skeleton->get_global_transform() * p_task->skeleton->get_bone_global_pose(ci->bone)).origin;
+		if (ci != &p_task->chain.chain_root)
+		{
+			total_distance += prev_pos.distance_to(final_pos);
+		}
+		prev_pos = final_pos;
 		if (!ci->children.is_empty()) {
 			ci = &ci->children.write[0];
 		} else {
 			ci = nullptr;
 		}
 	}
+	real_t final_dist = final_pos.distance_to(p_task->goal_global_transform.origin);
+	/*
+	printf("Final dist: %f\n", final_dist);
+	printf("Final pos: %f, %f, %f\n", final_pos.x,final_pos.y,final_pos.z);
+	printf("Goal pos: %f, %f, %f\n", p_task->goal_global_transform.origin.x,p_task->goal_global_transform.origin.y,p_task->goal_global_transform.origin.z);
+	*/
+	/*
+
+	if (final_dist > p_task->min_distance)
+	{
+		ChainItem *root(&p_task->chain.chain_root);
+		real_t needed_length = MIN(final_dist + total_distance, 2.0 + total_distance);
+		real_t stretched_scale =  1.0 + ((needed_length / total_distance - 1.0));
+
+		Transform3D new_bone_pose(p_task->skeleton->get_bone_global_pose(root->bone));
+		Vector3 origin_origin = new_bone_pose.origin;
+		
+		new_bone_pose.scale(Vector3(stretched_scale, stretched_scale, stretched_scale));
+		new_bone_pose.origin = origin_origin;
+		p_task->skeleton->set_bone_global_pose_override(root->bone, new_bone_pose, 1.0, true);
+		
+		ci = &p_task->chain.chain_root;
+		Transform3D prev_trans = new_bone_pose;
+		while (ci) {
+			if (!ci->children.is_empty()) {
+				ci = &ci->children.write[0];
+				Transform3D child_bone_pose(prev_trans * p_task->skeleton->get_bone_global_pose_override(ci->bone));
+				//child_bone_pose.scale(Vector3(stretched_scale, stretched_scale, stretched_scale));
+
+				p_task->skeleton->set_bone_global_pose_override(ci->bone, child_bone_pose, 1.0, true);
+				prev_trans = child_bone_pose;
+			} else {
+				ci = nullptr;
+			}
+		}
+		
+	}
+	*/
+	
+
+
 }
 
 void FabrikInverseKinematic::_update_chain(const Skeleton3D *p_sk, ChainItem *p_chain_item) {

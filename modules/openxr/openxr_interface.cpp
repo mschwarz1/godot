@@ -586,6 +586,7 @@ void OpenXRInterface::uninitialize() {
 	}
 
 	initialized = false;
+	openxr_api->finish();
 }
 
 Dictionary OpenXRInterface::get_system_info() {

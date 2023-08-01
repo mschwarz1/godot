@@ -87,6 +87,7 @@ public:
 		// Settings
 		real_t min_distance = 0.01;
 		int max_iterations = 10;
+		real_t max_stretch = 2.0;
 
 		// Bone data
 		BoneId root_bone = -1;
