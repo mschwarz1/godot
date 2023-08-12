@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8" ?>
-<class name="EditorVCSInterface" inherits="Object" version="4.1" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="../class.xsd">
+<class name="EditorVCSInterface" inherits="Object" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="../class.xsd">
 	<brief_description>
 		Version Control System (VCS) interface, which reads and writes to the local VCS in use.
 	</brief_description>
@@ -240,7 +240,7 @@
 			<return type="void" />
 			<param index="0" name="msg" type="String" />
 			<description>
-				Pops up an error message in the edior which is shown as coming from the underlying VCS. Use this to show VCS specific error messages.
+				Pops up an error message in the editor which is shown as coming from the underlying VCS. Use this to show VCS specific error messages.
 			</description>
 		</method>
 	</methods>

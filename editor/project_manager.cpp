@@ -59,6 +59,7 @@
 #include "scene/gui/separator.h"
 #include "scene/gui/texture_rect.h"
 #include "scene/main/window.h"
+#include "scene/resources/image_texture.h"
 #include "servers/display_server.h"
 #include "servers/navigation_server_3d.h"
 #include "servers/physics_server_2d.h"
@@ -1042,10 +1043,25 @@ void ProjectListItemControl::set_project_icon(const Ref<Texture2D> &p_icon) {
 	project_icon->set_texture(p_icon);
 }
 
-void ProjectListItemControl::set_unsupported_features(const PackedStringArray &p_features) {
+bool _project_feature_looks_like_version(const String &p_feature) {
+	return p_feature.contains(".") && p_feature.substr(0, 3).is_numeric();
+}
+
+void ProjectListItemControl::set_unsupported_features(PackedStringArray p_features) {
 	if (p_features.size() > 0) {
-		String unsupported_features_str = String(", ").join(p_features);
-		project_unsupported_features->set_tooltip_text(TTR("The project uses features unsupported by the current build:") + "\n" + unsupported_features_str);
+		String tooltip_text = "";
+		for (int i = 0; i < p_features.size(); i++) {
+			if (_project_feature_looks_like_version(p_features[i])) {
+				tooltip_text += TTR("This project was last edited in a different Godot version: ") + p_features[i] + "\n";
+				p_features.remove_at(i);
+				i--;
+			}
+		}
+		if (p_features.size() > 0) {
+			String unsupported_features_str = String(", ").join(p_features);
+			tooltip_text += TTR("This project uses features unsupported by the current build:") + "\n" + unsupported_features_str;
+		}
+		project_unsupported_features->set_tooltip_text(tooltip_text);
 		project_unsupported_features->show();
 	} else {
 		project_unsupported_features->hide();
@@ -1450,7 +1466,7 @@ void ProjectList::_create_project_item_control(int p_index) {
 	hb->set_project_path(item.path);
 	hb->set_tooltip_text(item.description);
 	hb->set_tags(item.tags, this);
-	hb->set_unsupported_features(item.unsupported_features);
+	hb->set_unsupported_features(item.unsupported_features.duplicate());
 
 	hb->set_is_favorite(item.favorite);
 	hb->set_is_missing(item.missing);
@@ -1961,10 +1977,10 @@ void ProjectManager::_notification(int p_what) {
 				real_t size = get_size().x / EDSCALE;
 				// Adjust names of tabs to fit the new size.
 				if (size < 650) {
-					local_projects_hb->set_name(TTR("Local"));
+					local_projects_vb->set_name(TTR("Local"));
 					asset_library->set_name(TTR("Asset Library"));
 				} else {
-					local_projects_hb->set_name(TTR("Local Projects"));
+					local_projects_vb->set_name(TTR("Local Projects"));
 					asset_library->set_name(TTR("Asset Library Projects"));
 				}
 			}
@@ -2297,8 +2313,8 @@ void ProjectManager::_open_selected_projects_ask() {
 				warning_message += TTR("Warning: This project uses C#, but this build of Godot does not have\nthe Mono module. If you proceed you will not be able to use any C# scripts.\n\n");
 				unsupported_features.remove_at(i);
 				i--;
-			} else if (feature.substr(0, 3).is_numeric()) {
-				warning_message += vformat(TTR("Warning: This project was built in Godot %s.\nOpening will upgrade or downgrade the project to Godot %s.\n\n"), Variant(feature), Variant(VERSION_BRANCH));
+			} else if (_project_feature_looks_like_version(feature)) {
+				warning_message += vformat(TTR("Warning: This project was last edited in Godot %s. Opening will change it to Godot %s.\n\n"), Variant(feature), Variant(VERSION_BRANCH));
 				unsupported_features.remove_at(i);
 				i--;
 			}
@@ -2337,6 +2353,8 @@ void ProjectManager::_perform_full_project_conversion() {
 	args.push_back("--path");
 	args.push_back(path);
 	args.push_back("--convert-3to4");
+	args.push_back("--rendering-driver");
+	args.push_back(Main::get_rendering_driver_name());
 
 	Error err = OS::get_singleton()->create_instance(args);
 	ERR_FAIL_COND(err);
@@ -2504,6 +2522,7 @@ void ProjectManager::_apply_project_tags() {
 		callable_mp((Window *)tag_manage_dialog, &Window::show).call_deferred(); // Make sure the dialog does not disappear.
 		return;
 	} else {
+		tags.sort();
 		cfg.set_value("application", "config/tags", tags);
 		err = cfg.save(project_godot);
 		if (err != OK) {
@@ -2826,19 +2845,39 @@ ProjectManager::ProjectManager() {
 	tabs->set_anchors_and_offsets_preset(Control::PRESET_FULL_RECT);
 	tabs->connect("tab_changed", callable_mp(this, &ProjectManager::_on_tab_changed));
 
-	local_projects_hb = memnew(HBoxContainer);
-	local_projects_hb->set_name(TTR("Local Projects"));
-	tabs->add_child(local_projects_hb);
+	local_projects_vb = memnew(VBoxContainer);
+	local_projects_vb->set_name(TTR("Local Projects"));
+	tabs->add_child(local_projects_vb);
 
 	{
-		// Projects + search bar
-		VBoxContainer *search_tree_vb = memnew(VBoxContainer);
-		local_projects_hb->add_child(search_tree_vb);
-		search_tree_vb->set_h_size_flags(Control::SIZE_EXPAND_FILL);
-
+		// A bar at top with buttons and options.
 		HBoxContainer *hb = memnew(HBoxContainer);
 		hb->set_h_size_flags(Control::SIZE_EXPAND_FILL);
-		search_tree_vb->add_child(hb);
+		local_projects_vb->add_child(hb);
+
+		create_btn = memnew(Button);
+		create_btn->set_text(TTR("New"));
+		create_btn->set_shortcut(ED_SHORTCUT("project_manager/new_project", TTR("New Project"), KeyModifierMask::CMD_OR_CTRL | Key::N));
+		create_btn->connect("pressed", callable_mp(this, &ProjectManager::_new_project));
+		hb->add_child(create_btn);
+
+		import_btn = memnew(Button);
+		import_btn->set_text(TTR("Import"));
+		import_btn->set_shortcut(ED_SHORTCUT("project_manager/import_project", TTR("Import Project"), KeyModifierMask::CMD_OR_CTRL | Key::I));
+		import_btn->connect("pressed", callable_mp(this, &ProjectManager::_import_project));
+		hb->add_child(import_btn);
+
+		scan_btn = memnew(Button);
+		scan_btn->set_text(TTR("Scan"));
+		scan_btn->set_shortcut(ED_SHORTCUT("project_manager/scan_projects", TTR("Scan Projects"), KeyModifierMask::CMD_OR_CTRL | Key::S));
+		scan_btn->connect("pressed", callable_mp(this, &ProjectManager::_scan_projects));
+		hb->add_child(scan_btn);
+
+		loading_label = memnew(Label(TTR("Loading, please wait...")));
+		loading_label->set_h_size_flags(Control::SIZE_EXPAND_FILL);
+		hb->add_child(loading_label);
+		// The loading label is shown later.
+		loading_label->hide();
 
 		search_box = memnew(LineEdit);
 		search_box->set_placeholder(TTR("Filter Projects"));
@@ -2848,12 +2887,6 @@ ProjectManager::ProjectManager() {
 		search_box->set_h_size_flags(Control::SIZE_EXPAND_FILL);
 		hb->add_child(search_box);
 
-		loading_label = memnew(Label(TTR("Loading, please wait...")));
-		loading_label->set_h_size_flags(Control::SIZE_EXPAND_FILL);
-		hb->add_child(loading_label);
-		// The loading label is shown later.
-		loading_label->hide();
-
 		Label *sort_label = memnew(Label);
 		sort_label->set_text(TTR("Sort:"));
 		hb->add_child(sort_label);
@@ -2861,6 +2894,7 @@ ProjectManager::ProjectManager() {
 		filter_option = memnew(OptionButton);
 		filter_option->set_clip_text(true);
 		filter_option->set_h_size_flags(Control::SIZE_EXPAND_FILL);
+		filter_option->set_stretch_ratio(0.3);
 		filter_option->connect("item_selected", callable_mp(this, &ProjectManager::_on_order_option_changed));
 		hb->add_child(filter_option);
 
@@ -2873,41 +2907,28 @@ ProjectManager::ProjectManager() {
 		for (int i = 0; i < sort_filter_titles.size(); i++) {
 			filter_option->add_item(sort_filter_titles[i]);
 		}
+	}
+
+	{
+		// A container for the project list and for the side bar with buttons.
+		HBoxContainer *search_tree_hb = memnew(HBoxContainer);
+		local_projects_vb->add_child(search_tree_hb);
+		search_tree_hb->set_v_size_flags(Control::SIZE_EXPAND_FILL);
 
 		search_panel = memnew(PanelContainer);
-		search_panel->set_v_size_flags(Control::SIZE_EXPAND_FILL);
-		search_tree_vb->add_child(search_panel);
+		search_panel->set_h_size_flags(Control::SIZE_EXPAND_FILL);
+		search_tree_hb->add_child(search_panel);
 
 		_project_list = memnew(ProjectList);
 		_project_list->connect(ProjectList::SIGNAL_SELECTION_CHANGED, callable_mp(this, &ProjectManager::_update_project_buttons));
 		_project_list->connect(ProjectList::SIGNAL_PROJECT_ASK_OPEN, callable_mp(this, &ProjectManager::_open_selected_projects_ask));
 		_project_list->set_horizontal_scroll_mode(ScrollContainer::SCROLL_MODE_DISABLED);
 		search_panel->add_child(_project_list);
-	}
 
-	{
-		// Project tab side bar
+		// The side bar with the edit, run, rename, etc. buttons.
 		VBoxContainer *tree_vb = memnew(VBoxContainer);
 		tree_vb->set_custom_minimum_size(Size2(120, 120));
-		local_projects_hb->add_child(tree_vb);
-
-		create_btn = memnew(Button);
-		create_btn->set_text(TTR("New Project"));
-		create_btn->set_shortcut(ED_SHORTCUT("project_manager/new_project", TTR("New Project"), KeyModifierMask::CMD_OR_CTRL | Key::N));
-		create_btn->connect("pressed", callable_mp(this, &ProjectManager::_new_project));
-		tree_vb->add_child(create_btn);
-
-		import_btn = memnew(Button);
-		import_btn->set_text(TTR("Import"));
-		import_btn->set_shortcut(ED_SHORTCUT("project_manager/import_project", TTR("Import Project"), KeyModifierMask::CMD_OR_CTRL | Key::I));
-		import_btn->connect("pressed", callable_mp(this, &ProjectManager::_import_project));
-		tree_vb->add_child(import_btn);
-
-		scan_btn = memnew(Button);
-		scan_btn->set_text(TTR("Scan"));
-		scan_btn->set_shortcut(ED_SHORTCUT("project_manager/scan_projects", TTR("Scan Projects"), KeyModifierMask::CMD_OR_CTRL | Key::S));
-		scan_btn->connect("pressed", callable_mp(this, &ProjectManager::_scan_projects));
-		tree_vb->add_child(scan_btn);
+		search_tree_hb->add_child(tree_vb);
 
 		tree_vb->add_child(memnew(HSeparator));
 
@@ -3095,7 +3116,7 @@ ProjectManager::ProjectManager() {
 
 		ask_full_convert_dialog = memnew(ConfirmationDialog);
 		ask_full_convert_dialog->set_autowrap(true);
-		ask_full_convert_dialog->set_text(TTR("This option will perform full project conversion, updating scenes, resources and scripts from Godot 3.x to work in Godot 4.0.\n\nNote that this is a best-effort conversion, i.e. it makes upgrading the project easier, but it will not open out-of-the-box and will still require manual adjustments.\n\nIMPORTANT: Make sure to backup your project before converting, as this operation makes it impossible to open it in older versions of Godot."));
+		ask_full_convert_dialog->set_text(TTR("This option will perform full project conversion, updating scenes, resources and scripts from Godot 3 to work in Godot 4.\n\nNote that this is a best-effort conversion, i.e. it makes upgrading the project easier, but it will not open out-of-the-box and will still require manual adjustments.\n\nIMPORTANT: Make sure to backup your project before converting, as this operation makes it impossible to open it in older versions of Godot."));
 		ask_full_convert_dialog->connect("confirmed", callable_mp(this, &ProjectManager::_perform_full_project_conversion));
 		add_child(ask_full_convert_dialog);
 

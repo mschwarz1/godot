@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8" ?>
-<class name="NodePath" version="4.1" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="../class.xsd">
+<class name="NodePath" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="../class.xsd">
 	<brief_description>
 		A pre-parsed scene tree path.
 	</brief_description>
@@ -101,12 +101,12 @@
 				Returns all subnames concatenated with a colon character ([code]:[/code]) as separator, i.e. the right side of the first colon in a node path.
 				[codeblocks]
 				[gdscript]
-				var nodepath = NodePath("Path2D/PathFollow2D/Sprite2D:texture:load_path")
-				print(nodepath.get_concatenated_subnames()) # texture:load_path
+				var node_path = NodePath("Path2D/PathFollow2D/Sprite2D:texture:load_path")
+				print(node_path.get_concatenated_subnames()) # texture:load_path
 				[/gdscript]
 				[csharp]
-				var nodepath = new NodePath("Path2D/PathFollow2D/Sprite2D:texture:load_path");
-				GD.Print(nodepath.GetConcatenatedSubnames()); // texture:load_path
+				var nodePath = new NodePath("Path2D/PathFollow2D/Sprite2D:texture:load_path");
+				GD.Print(nodePath.GetConcatenatedSubnames()); // texture:load_path
 				[/csharp]
 				[/codeblocks]
 			</description>

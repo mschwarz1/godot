@@ -301,6 +301,46 @@ Vector<Vector3> NavMap::get_path(Vector3 p_origin, Vector3 p_destination, bool p
 				}
 			}
 
+			// Search all faces of start polygon as well.
+			bool closest_point_on_start_poly = false;
+			for (size_t point_id = 2; point_id < begin_poly->points.size(); point_id++) {
+				Face3 f(begin_poly->points[0].pos, begin_poly->points[point_id - 1].pos, begin_poly->points[point_id].pos);
+				Vector3 spoint = f.get_closest_point_to(p_destination);
+				real_t dpoint = spoint.distance_to(p_destination);
+				if (dpoint < end_d) {
+					end_point = spoint;
+					end_d = dpoint;
+					closest_point_on_start_poly = true;
+				}
+			}
+
+			if (closest_point_on_start_poly) {
+				// No point to run PostProcessing when start and end convex polygon is the same.
+				if (r_path_types) {
+					r_path_types->resize(2);
+					r_path_types->write[0] = begin_poly->owner->get_type();
+					r_path_types->write[1] = begin_poly->owner->get_type();
+				}
+
+				if (r_path_rids) {
+					r_path_rids->resize(2);
+					(*r_path_rids)[0] = begin_poly->owner->get_self();
+					(*r_path_rids)[1] = begin_poly->owner->get_self();
+				}
+
+				if (r_path_owners) {
+					r_path_owners->resize(2);
+					r_path_owners->write[0] = begin_poly->owner->get_owner_id();
+					r_path_owners->write[1] = begin_poly->owner->get_owner_id();
+				}
+
+				Vector<Vector3> path;
+				path.resize(2);
+				path.write[0] = begin_point;
+				path.write[1] = end_point;
+				return path;
+			}
+
 			// Reset open and navigation_polys
 			gd::NavigationPoly np = navigation_polys[0];
 			navigation_polys.clear();
@@ -346,9 +386,44 @@ Vector<Vector3> NavMap::get_path(Vector3 p_origin, Vector3 p_destination, bool p
 		}
 	}
 
-	// If we did not find a route, return an empty path.
+	// We did not find a route but we have both a start polygon and an end polygon at this point.
+	// Usually this happens because there was not a single external or internal connected edge, e.g. our start polygon is an isolated, single convex polygon.
 	if (!found_route) {
-		return Vector<Vector3>();
+		end_d = FLT_MAX;
+		// Search all faces of the start polygon for the closest point to our target position.
+		for (size_t point_id = 2; point_id < begin_poly->points.size(); point_id++) {
+			Face3 f(begin_poly->points[0].pos, begin_poly->points[point_id - 1].pos, begin_poly->points[point_id].pos);
+			Vector3 spoint = f.get_closest_point_to(p_destination);
+			real_t dpoint = spoint.distance_to(p_destination);
+			if (dpoint < end_d) {
+				end_point = spoint;
+				end_d = dpoint;
+			}
+		}
+
+		if (r_path_types) {
+			r_path_types->resize(2);
+			r_path_types->write[0] = begin_poly->owner->get_type();
+			r_path_types->write[1] = begin_poly->owner->get_type();
+		}
+
+		if (r_path_rids) {
+			r_path_rids->resize(2);
+			(*r_path_rids)[0] = begin_poly->owner->get_self();
+			(*r_path_rids)[1] = begin_poly->owner->get_self();
+		}
+
+		if (r_path_owners) {
+			r_path_owners->resize(2);
+			r_path_owners->write[0] = begin_poly->owner->get_owner_id();
+			r_path_owners->write[1] = begin_poly->owner->get_owner_id();
+		}
+
+		Vector<Vector3> path;
+		path.resize(2);
+		path.write[0] = begin_point;
+		path.write[1] = end_point;
+		return path;
 	}
 
 	Vector<Vector3> path;
@@ -356,6 +431,17 @@ Vector<Vector3> NavMap::get_path(Vector3 p_origin, Vector3 p_destination, bool p
 	if (p_optimize) {
 		// Set the apex poly/point to the end point
 		gd::NavigationPoly *apex_poly = &navigation_polys[least_cost_id];
+
+		Vector3 back_pathway[2] = { apex_poly->back_navigation_edge_pathway_start, apex_poly->back_navigation_edge_pathway_end };
+		const Vector3 back_edge_closest_point = Geometry3D::get_closest_point_to_segment(end_point, back_pathway);
+		if (end_point.is_equal_approx(back_edge_closest_point)) {
+			// The end point is basically on top of the last crossed edge, funneling around the corners would at best do nothing.
+			// At worst it would add an unwanted path point before the last point due to precision issues so skip to the next polygon.
+			if (apex_poly->back_navigation_poly_id != -1) {
+				apex_poly = &navigation_polys[apex_poly->back_navigation_poly_id];
+			}
+		}
+
 		Vector3 apex_point = end_point;
 
 		gd::NavigationPoly *left_poly = apex_poly;
@@ -729,6 +815,9 @@ void NavMap::sync() {
 		// Resize the polygon count.
 		int count = 0;
 		for (const NavRegion *region : regions) {
+			if (!region->get_enabled()) {
+				continue;
+			}
 			count += region->get_polygons().size();
 		}
 		polygons.resize(count);
@@ -736,6 +825,9 @@ void NavMap::sync() {
 		// Copy all region polygons in the map.
 		count = 0;
 		for (const NavRegion *region : regions) {
+			if (!region->get_enabled()) {
+				continue;
+			}
 			const LocalVector<gd::Polygon> &polygons_source = region->get_polygons();
 			for (uint32_t n = 0; n < polygons_source.size(); n++) {
 				polygons[count + n] = polygons_source[n];
@@ -968,7 +1060,8 @@ void NavMap::sync() {
 		}
 
 		// Update the update ID.
-		map_update_id = (map_update_id + 1) % 9999999;
+		// Some code treats 0 as a failure case, so we avoid returning 0.
+		map_update_id = map_update_id % 9999999 + 1;
 	}
 
 	// Do we have modified obstacle positions?
@@ -1042,16 +1135,16 @@ void NavMap::_update_rvo_obstacles_tree_2d() {
 			rvo_2d_obstacle->avoidance_layers_ = _obstacle_avoidance_layers;
 
 			if (i != 0) {
-				rvo_2d_obstacle->previous_ = raw_obstacles.back();
-				rvo_2d_obstacle->previous_->next_ = rvo_2d_obstacle;
+				rvo_2d_obstacle->prevObstacle_ = raw_obstacles.back();
+				rvo_2d_obstacle->prevObstacle_->nextObstacle_ = rvo_2d_obstacle;
 			}
 
 			if (i == rvo_2d_vertices.size() - 1) {
-				rvo_2d_obstacle->next_ = raw_obstacles[obstacleNo];
-				rvo_2d_obstacle->next_->previous_ = rvo_2d_obstacle;
+				rvo_2d_obstacle->nextObstacle_ = raw_obstacles[obstacleNo];
+				rvo_2d_obstacle->nextObstacle_->prevObstacle_ = rvo_2d_obstacle;
 			}
 
-			rvo_2d_obstacle->direction_ = normalize(rvo_2d_vertices[(i == rvo_2d_vertices.size() - 1 ? 0 : i + 1)] - rvo_2d_vertices[i]);
+			rvo_2d_obstacle->unitDir_ = normalize(rvo_2d_vertices[(i == rvo_2d_vertices.size() - 1 ? 0 : i + 1)] - rvo_2d_vertices[i]);
 
 			if (rvo_2d_vertices.size() == 2) {
 				rvo_2d_obstacle->isConvex_ = true;
@@ -1099,9 +1192,9 @@ void NavMap::_update_rvo_simulation() {
 }
 
 void NavMap::compute_single_avoidance_step_2d(uint32_t index, NavAgent **agent) {
-	(*(agent + index))->get_rvo_agent_2d()->computeNeighbors(rvo_simulation_2d.kdTree_);
-	(*(agent + index))->get_rvo_agent_2d()->computeNewVelocity(rvo_simulation_2d.timeStep_);
-	(*(agent + index))->get_rvo_agent_2d()->update(rvo_simulation_2d.timeStep_);
+	(*(agent + index))->get_rvo_agent_2d()->computeNeighbors(&rvo_simulation_2d);
+	(*(agent + index))->get_rvo_agent_2d()->computeNewVelocity(&rvo_simulation_2d);
+	(*(agent + index))->get_rvo_agent_2d()->update(&rvo_simulation_2d);
 	(*(agent + index))->update();
 }
 
@@ -1124,9 +1217,9 @@ void NavMap::step(real_t p_deltatime) {
 			WorkerThreadPool::get_singleton()->wait_for_group_task_completion(group_task);
 		} else {
 			for (NavAgent *agent : active_2d_avoidance_agents) {
-				agent->get_rvo_agent_2d()->computeNeighbors(rvo_simulation_2d.kdTree_);
-				agent->get_rvo_agent_2d()->computeNewVelocity(rvo_simulation_2d.timeStep_);
-				agent->get_rvo_agent_2d()->update(rvo_simulation_2d.timeStep_);
+				agent->get_rvo_agent_2d()->computeNeighbors(&rvo_simulation_2d);
+				agent->get_rvo_agent_2d()->computeNewVelocity(&rvo_simulation_2d);
+				agent->get_rvo_agent_2d()->update(&rvo_simulation_2d);
 				agent->update();
 			}
 		}

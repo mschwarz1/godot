@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8" ?>
-<class name="OptionButton" inherits="Button" version="4.1" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="../class.xsd">
+<class name="OptionButton" inherits="Button" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="../class.xsd">
 	<brief_description>
 		A button that brings up a dropdown with selectable options when pressed.
 	</brief_description>
@@ -262,7 +262,7 @@
 		<theme_item name="arrow_margin" data_type="constant" type="int" default="4">
 			The horizontal space between the arrow icon and the right edge of the button.
 		</theme_item>
-		<theme_item name="h_separation" data_type="constant" type="int" default="2">
+		<theme_item name="h_separation" data_type="constant" type="int" default="4">
 			The horizontal space between [OptionButton]'s icon and text. Negative values will be treated as [code]0[/code] when used.
 		</theme_item>
 		<theme_item name="modulate_arrow" data_type="constant" type="int" default="0">

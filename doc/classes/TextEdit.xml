@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8" ?>
-<class name="TextEdit" inherits="Control" version="4.1" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="../class.xsd">
+<class name="TextEdit" inherits="Control" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="../class.xsd">
 	<brief_description>
 		A multiline text editor.
 	</brief_description>
@@ -1234,7 +1234,7 @@
 			<param index="1" name="to_line" type="int" />
 			<description>
 				Emitted immediately when the text changes.
-				When text is added [param from_line] will be less then [param to_line]. On a remove [param to_line] will be less then [param from_line].
+				When text is added [param from_line] will be less than [param to_line]. On a remove [param to_line] will be less than [param from_line].
 			</description>
 		</signal>
 		<signal name="text_changed">

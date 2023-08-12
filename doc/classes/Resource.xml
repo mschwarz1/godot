@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8" ?>
-<class name="Resource" inherits="RefCounted" version="4.1" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="../class.xsd">
+<class name="Resource" inherits="RefCounted" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="../class.xsd">
 	<brief_description>
 		Base class for serializable objects.
 	</brief_description>
@@ -32,7 +32,7 @@
 		<method name="emit_changed">
 			<return type="void" />
 			<description>
-				Emits the [signal changed] signal. This method is called automatically for built-in resources.
+				Emits the [signal changed] signal. This method is called automatically for some built-in resources.
 				[b]Note:[/b] For custom resources, it's recommended to call this method whenever a meaningful change occurs, such as a modified property. This ensures that custom [Object]s depending on the resource are properly updated.
 				[codeblock]
 				var damage:

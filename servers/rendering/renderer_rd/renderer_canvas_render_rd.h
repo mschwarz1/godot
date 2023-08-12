@@ -48,6 +48,8 @@ class RendererCanvasRenderRD : public RendererCanvasRender {
 		CANVAS_TEXTURE_UNIFORM_SET = 3,
 	};
 
+	const int SAMPLERS_BINDING_FIRST_INDEX = 10;
+
 	enum ShaderVariant {
 		SHADER_VARIANT_QUAD,
 		SHADER_VARIANT_NINEPATCH,
@@ -72,6 +74,8 @@ class RendererCanvasRenderRD : public RendererCanvasRender {
 
 		FLAGS_CLIP_RECT_UV = (1 << 9),
 		FLAGS_TRANSPOSE_RECT = (1 << 10),
+
+		FLAGS_CONVERT_ATTRIBUTES_TO_LINEAR = (1 << 11),
 
 		FLAGS_NINEPACH_DRAW_CENTER = (1 << 12),
 		FLAGS_USING_PARTICLES = (1 << 13),
@@ -193,6 +197,7 @@ class RendererCanvasRenderRD : public RendererCanvasRender {
 	struct CanvasMaterialData : public RendererRD::MaterialStorage::MaterialData {
 		CanvasShaderData *shader_data = nullptr;
 		RID uniform_set;
+		RID uniform_set_srgb;
 
 		virtual void set_render_priority(int p_priority) {}
 		virtual void set_next_pass(RID p_pass) {}

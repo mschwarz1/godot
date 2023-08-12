@@ -925,7 +925,6 @@ Dictionary EditorData::restore_edited_scene_state(EditorSelection *p_selection, 
 	for (Node *E : es.selection) {
 		p_selection->add_node(E);
 	}
-	p_selection->cancel_update(); // Selection update results in redundant Node edit, so we cancel it.
 	set_editor_plugin_states(es.editor_states);
 
 	return es.custom_state;
@@ -1155,15 +1154,6 @@ Ref<Texture2D> EditorData::get_script_icon(const Ref<Script> &p_script) {
 		return ext_icon;
 	}
 
-	// Look for the base type in the editor theme.
-	// This is only relevant for built-in classes.
-	const Control *gui_base = EditorNode::get_singleton()->get_gui_base();
-	if (gui_base && gui_base->has_theme_icon(base_type, SNAME("EditorIcons"))) {
-		Ref<Texture2D> theme_icon = gui_base->get_theme_icon(base_type, SNAME("EditorIcons"));
-		_script_icon_cache[p_script] = theme_icon;
-		return theme_icon;
-	}
-
 	// If no icon found, cache it as null.
 	_script_icon_cache[p_script] = Ref<Texture>();
 	return nullptr;
@@ -1348,10 +1338,6 @@ void EditorSelection::clear() {
 
 	changed = true;
 	node_list_changed = true;
-}
-
-void EditorSelection::cancel_update() {
-	changed = false;
 }
 
 EditorSelection::EditorSelection() {

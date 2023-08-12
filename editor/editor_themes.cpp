@@ -36,6 +36,10 @@
 #include "editor/editor_icons.gen.h"
 #include "editor/editor_scale.h"
 #include "editor/editor_settings.h"
+#include "scene/resources/image_texture.h"
+#include "scene/resources/style_box_flat.h"
+#include "scene/resources/style_box_line.h"
+#include "scene/resources/style_box_texture.h"
 
 #include "modules/modules_enabled.gen.h" // For svg.
 #ifdef MODULE_SVG_ENABLED
@@ -172,12 +176,6 @@ void EditorColorMap::create() {
 	add_conversion_exception("Sky");
 	add_conversion_exception("EditorControlAnchor");
 	add_conversion_exception("DefaultProjectIcon");
-	add_conversion_exception("GuiChecked");
-	add_conversion_exception("GuiRadioChecked");
-	add_conversion_exception("GuiIndeterminate");
-	add_conversion_exception("GuiCloseCustomizable");
-	add_conversion_exception("GuiGraphNodePort");
-	add_conversion_exception("GuiResizer");
 	add_conversion_exception("ZoomMore");
 	add_conversion_exception("ZoomLess");
 	add_conversion_exception("ZoomReset");
@@ -187,6 +185,18 @@ void EditorColorMap::create() {
 	add_conversion_exception("StatusSuccess");
 	add_conversion_exception("StatusWarning");
 	add_conversion_exception("OverbrightIndicator");
+	add_conversion_exception("MaterialPreviewCube");
+	add_conversion_exception("MaterialPreviewSphere");
+	add_conversion_exception("MaterialPreviewLight1");
+	add_conversion_exception("MaterialPreviewLight2");
+
+	// GUI
+	add_conversion_exception("GuiChecked");
+	add_conversion_exception("GuiRadioChecked");
+	add_conversion_exception("GuiIndeterminate");
+	add_conversion_exception("GuiCloseCustomizable");
+	add_conversion_exception("GuiGraphNodePort");
+	add_conversion_exception("GuiResizer");
 	add_conversion_exception("GuiMiniCheckerboard");
 
 	/// Code Editor.
@@ -244,8 +254,7 @@ static Ref<ImageTexture> editor_generate_icon(int p_index, float p_scale, float 
 	// Generating upsampled icons is slower, and the benefit is hardly visible
 	// with integer editor scales.
 	const bool upsample = !Math::is_equal_approx(Math::round(p_scale), p_scale);
-	ImageLoaderSVG img_loader;
-	Error err = img_loader.create_image_from_string(img, editor_icons_sources[p_index], p_scale, upsample, p_convert_colors);
+	Error err = ImageLoaderSVG::create_image_from_string(img, editor_icons_sources[p_index], p_scale, upsample, p_convert_colors);
 	ERR_FAIL_COND_V_MSG(err != OK, Ref<ImageTexture>(), "Failed generating icon, unsupported or invalid SVG data in editor theme.");
 	if (p_saturation != 1.0) {
 		img->adjust_bcs(1.0, 1.0, p_saturation);
@@ -905,7 +914,7 @@ Ref<Theme> create_editor_theme(const Ref<Theme> p_theme) {
 	theme->set_color("icon_pressed_color", "Button", icon_pressed_color);
 	theme->set_color("icon_disabled_color", "Button", icon_disabled_color);
 
-	theme->set_constant("h_separation", "Button", 2 * EDSCALE);
+	theme->set_constant("h_separation", "Button", 4 * EDSCALE);
 	theme->set_constant("outline_size", "Button", 0);
 
 	const float ACTION_BUTTON_EXTRA_MARGIN = 32 * EDSCALE;
@@ -940,6 +949,25 @@ Ref<Theme> create_editor_theme(const Ref<Theme> p_theme) {
 	editor_log_button_pressed->set_border_width(SIDE_BOTTOM, 2 * EDSCALE);
 	editor_log_button_pressed->set_border_color(accent_color);
 	theme->set_stylebox("pressed", "EditorLogFilterButton", editor_log_button_pressed);
+
+	// Buttons in material previews
+	const Color dim_light_color = icon_normal_color.darkened(0.24);
+	const Color dim_light_highlighted_color = icon_normal_color.darkened(0.18);
+	Ref<StyleBox> sb_empty_borderless = make_empty_stylebox();
+
+	theme->set_type_variation("PreviewLightButton", "Button");
+	// When pressed, don't use the accent color tint. When unpressed, dim the icon.
+	theme->set_color("icon_normal_color", "PreviewLightButton", dim_light_color);
+	theme->set_color("icon_focus_color", "PreviewLightButton", dim_light_color);
+	theme->set_color("icon_pressed_color", "PreviewLightButton", icon_normal_color);
+	theme->set_color("icon_hover_pressed_color", "PreviewLightButton", icon_normal_color);
+	// Unpressed icon is dim, so use a dim highlight.
+	theme->set_color("icon_hover_color", "PreviewLightButton", dim_light_highlighted_color);
+
+	theme->set_stylebox("normal", "PreviewLightButton", sb_empty_borderless);
+	theme->set_stylebox("hover", "PreviewLightButton", sb_empty_borderless);
+	theme->set_stylebox("focus", "PreviewLightButton", sb_empty_borderless);
+	theme->set_stylebox("pressed", "PreviewLightButton", sb_empty_borderless);
 
 	// ProjectTag
 	{
@@ -1252,6 +1280,7 @@ Ref<Theme> create_editor_theme(const Ref<Theme> p_theme) {
 	}
 
 	theme->set_stylebox("panel", "Tree", style_tree_bg);
+	theme->set_stylebox("panel", "EditorValidationPanel", style_tree_bg);
 
 	// Tree
 	theme->set_icon("checked", "Tree", theme->get_icon(SNAME("GuiChecked"), SNAME("EditorIcons")));
@@ -1276,6 +1305,10 @@ Ref<Theme> create_editor_theme(const Ref<Theme> p_theme) {
 	theme->set_constant("h_separation", "Tree", 6 * EDSCALE);
 	theme->set_constant("guide_width", "Tree", border_width);
 	theme->set_constant("item_margin", "Tree", 3 * default_margin_size * EDSCALE);
+	theme->set_constant("inner_item_margin_bottom", "Tree", (default_margin_size + extra_spacing) * EDSCALE);
+	theme->set_constant("inner_item_margin_left", "Tree", (default_margin_size + extra_spacing) * EDSCALE);
+	theme->set_constant("inner_item_margin_right", "Tree", (default_margin_size + extra_spacing) * EDSCALE);
+	theme->set_constant("inner_item_margin_top", "Tree", (default_margin_size + extra_spacing) * EDSCALE);
 	theme->set_constant("button_margin", "Tree", default_margin_size * EDSCALE);
 	theme->set_constant("scroll_border", "Tree", 40 * EDSCALE);
 	theme->set_constant("scroll_speed", "Tree", 12);
@@ -1602,6 +1635,7 @@ Ref<Theme> create_editor_theme(const Ref<Theme> p_theme) {
 	style_window->set_border_width(SIDE_TOP, 24 * EDSCALE);
 	style_window->set_expand_margin(SIDE_TOP, 24 * EDSCALE);
 	theme->set_stylebox("embedded_border", "Window", style_window);
+	theme->set_stylebox("embedded_unfocused_border", "Window", style_window);
 
 	theme->set_color("title_color", "Window", font_color);
 	theme->set_icon("close", "Window", theme->get_icon(SNAME("GuiClose"), SNAME("EditorIcons")));
@@ -1785,7 +1819,7 @@ Ref<Theme> create_editor_theme(const Ref<Theme> p_theme) {
 	theme->set_constant("outline_size", "ProgressBar", 0);
 
 	// GraphEdit
-	theme->set_stylebox("bg", "GraphEdit", style_tree_bg);
+	theme->set_stylebox("panel", "GraphEdit", style_tree_bg);
 	if (dark_theme) {
 		theme->set_color("grid_major", "GraphEdit", Color(1.0, 1.0, 1.0, 0.15));
 		theme->set_color("grid_minor", "GraphEdit", Color(1.0, 1.0, 1.0, 0.07));
@@ -1796,18 +1830,20 @@ Ref<Theme> create_editor_theme(const Ref<Theme> p_theme) {
 	theme->set_color("selection_fill", "GraphEdit", theme->get_color(SNAME("box_selection_fill_color"), SNAME("Editor")));
 	theme->set_color("selection_stroke", "GraphEdit", theme->get_color(SNAME("box_selection_stroke_color"), SNAME("Editor")));
 	theme->set_color("activity", "GraphEdit", accent_color);
-	theme->set_icon("minus", "GraphEdit", theme->get_icon(SNAME("ZoomLess"), SNAME("EditorIcons")));
-	theme->set_icon("more", "GraphEdit", theme->get_icon(SNAME("ZoomMore"), SNAME("EditorIcons")));
-	theme->set_icon("reset", "GraphEdit", theme->get_icon(SNAME("ZoomReset"), SNAME("EditorIcons")));
-	theme->set_icon("snap", "GraphEdit", theme->get_icon(SNAME("SnapGrid"), SNAME("EditorIcons")));
-	theme->set_icon("minimap", "GraphEdit", theme->get_icon(SNAME("GridMinimap"), SNAME("EditorIcons")));
+
+	theme->set_icon("zoom_out", "GraphEdit", theme->get_icon(SNAME("ZoomLess"), SNAME("EditorIcons")));
+	theme->set_icon("zoom_in", "GraphEdit", theme->get_icon(SNAME("ZoomMore"), SNAME("EditorIcons")));
+	theme->set_icon("zoom_reset", "GraphEdit", theme->get_icon(SNAME("ZoomReset"), SNAME("EditorIcons")));
+	theme->set_icon("grid_toggle", "GraphEdit", theme->get_icon(SNAME("GridToggle"), SNAME("EditorIcons")));
+	theme->set_icon("minimap_toggle", "GraphEdit", theme->get_icon(SNAME("GridMinimap"), SNAME("EditorIcons")));
+	theme->set_icon("snapping_toggle", "GraphEdit", theme->get_icon(SNAME("SnapGrid"), SNAME("EditorIcons")));
 	theme->set_icon("layout", "GraphEdit", theme->get_icon(SNAME("GridLayout"), SNAME("EditorIcons")));
 
 	// GraphEditMinimap
 	Ref<StyleBoxFlat> style_minimap_bg = make_flat_stylebox(dark_color_1, 0, 0, 0, 0);
 	style_minimap_bg->set_border_color(dark_color_3);
 	style_minimap_bg->set_border_width_all(1);
-	theme->set_stylebox("bg", "GraphEditMinimap", style_minimap_bg);
+	theme->set_stylebox("panel", "GraphEditMinimap", style_minimap_bg);
 
 	Ref<StyleBoxFlat> style_minimap_camera;
 	Ref<StyleBoxFlat> style_minimap_node;
@@ -1887,8 +1923,6 @@ Ref<Theme> create_editor_theme(const Ref<Theme> p_theme) {
 
 	theme->set_stylebox("frame", "GraphNode", graphsb);
 	theme->set_stylebox("selected_frame", "GraphNode", graphsbselected);
-	theme->set_stylebox("comment", "GraphNode", graphsbcomment);
-	theme->set_stylebox("comment_focus", "GraphNode", graphsbcommentselected);
 	theme->set_stylebox("breakpoint", "GraphNode", graphsbbreakpoint);
 	theme->set_stylebox("position", "GraphNode", graphsbposition);
 	theme->set_stylebox("slot", "GraphNode", graphsbslot);
@@ -1910,7 +1944,10 @@ Ref<Theme> create_editor_theme(const Ref<Theme> p_theme) {
 
 	theme->set_icon("close", "GraphNode", theme->get_icon(SNAME("GuiCloseCustomizable"), SNAME("EditorIcons")));
 	theme->set_icon("resizer", "GraphNode", theme->get_icon(SNAME("GuiResizer"), SNAME("EditorIcons")));
-	theme->set_icon("port", "GraphNode", theme->get_icon(SNAME("GuiGraphNodePort"), SNAME("EditorIcons")));
+	Ref<ImageTexture> port_icon = theme->get_icon(SNAME("GuiGraphNodePort"), SNAME("EditorIcons"));
+	// The true size is 24x24 This is necessary for sharp port icons at high zoom levels in GraphEdit (up to ~200%).
+	port_icon->set_size_override(Size2(12, 12));
+	theme->set_icon("port", "GraphNode", port_icon);
 
 	theme->set_font("title_font", "GraphNode", theme->get_font(SNAME("main_bold_msdf"), SNAME("EditorFonts")));
 
@@ -1930,7 +1967,7 @@ Ref<Theme> create_editor_theme(const Ref<Theme> p_theme) {
 	theme->set_color("files_disabled", "FileDialog", font_disabled_color);
 
 	// ColorPicker
-	theme->set_constant("margin", "ColorPicker", popup_margin_size);
+	theme->set_constant("margin", "ColorPicker", default_margin_size);
 	theme->set_constant("sv_width", "ColorPicker", 256 * EDSCALE);
 	theme->set_constant("sv_height", "ColorPicker", 256 * EDSCALE);
 	theme->set_constant("h_width", "ColorPicker", 30 * EDSCALE);

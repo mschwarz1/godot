@@ -1195,12 +1195,15 @@ Error VulkanContext::_create_physical_device(VkSurfaceKHR p_surface) {
 			VkQueueFamilyProperties *device_queue_props = (VkQueueFamilyProperties *)malloc(device_queue_family_count * sizeof(VkQueueFamilyProperties));
 			vkGetPhysicalDeviceQueueFamilyProperties(physical_devices[i], &device_queue_family_count, device_queue_props);
 			for (uint32_t j = 0; j < device_queue_family_count; j++) {
-				VkBool32 supports;
-				vkGetPhysicalDeviceSurfaceSupportKHR(physical_devices[i], j, p_surface, &supports);
-				if (supports && ((device_queue_props[j].queueFlags & VK_QUEUE_GRAPHICS_BIT) != 0)) {
-					present_supported = true;
-				} else {
-					continue;
+				if ((device_queue_props[j].queueFlags & VK_QUEUE_GRAPHICS_BIT) != 0) {
+					VkBool32 supports;
+					err = vkGetPhysicalDeviceSurfaceSupportKHR(
+							physical_devices[i], j, p_surface, &supports);
+					if (err == VK_SUCCESS && supports) {
+						present_supported = true;
+					} else {
+						continue;
+					}
 				}
 			}
 			String name = props.deviceName;
@@ -1775,6 +1778,7 @@ Error VulkanContext::_clean_up_swap_chain(Window *window) {
 	fpDestroySwapchainKHR(device, window->swapchain, nullptr);
 	window->swapchain = VK_NULL_HANDLE;
 	vkDestroyRenderPass(device, window->render_pass, nullptr);
+	window->render_pass = VK_NULL_HANDLE;
 	if (window->swapchain_image_resources) {
 		for (uint32_t i = 0; i < swapchainImageCount; i++) {
 			vkDestroyImageView(device, window->swapchain_image_resources[i].view, nullptr);
@@ -1783,6 +1787,7 @@ Error VulkanContext::_clean_up_swap_chain(Window *window) {
 
 		free(window->swapchain_image_resources);
 		window->swapchain_image_resources = nullptr;
+		swapchainImageCount = 0;
 	}
 	if (separate_present_queue) {
 		vkDestroyCommandPool(device, window->present_cmd_pool, nullptr);
@@ -1802,6 +1807,16 @@ Error VulkanContext::_update_swap_chain(Window *window) {
 	err = fpGetPhysicalDeviceSurfaceCapabilitiesKHR(gpu, window->surface, &surfCapabilities);
 	ERR_FAIL_COND_V(err, ERR_CANT_CREATE);
 
+	{
+		VkBool32 supports = VK_FALSE;
+		err = vkGetPhysicalDeviceSurfaceSupportKHR(
+				gpu, present_queue_family_index, window->surface, &supports);
+		ERR_FAIL_COND_V_MSG(err != VK_SUCCESS || supports == false, ERR_CANT_CREATE,
+				"Window's surface is not supported by device. Did the GPU go offline? Was the window "
+				"created on another monitor? Check previous errors & try launching with "
+				"--gpu-validation.");
+	}
+
 	uint32_t presentModeCount;
 	err = fpGetPhysicalDeviceSurfacePresentModesKHR(gpu, window->surface, &presentModeCount, nullptr);
 	ERR_FAIL_COND_V(err, ERR_CANT_CREATE);
@@ -1818,7 +1833,7 @@ Error VulkanContext::_update_swap_chain(Window *window) {
 	if (window->width == 0 || window->height == 0) {
 		free(presentModes);
 		// Likely window minimized, no swapchain created.
-		return OK;
+		return ERR_SKIP;
 	}
 	// The FIFO present mode is guaranteed by the spec to be supported
 	// and to have no tearing.  It's a great default present mode to use.
@@ -2275,8 +2290,10 @@ Error VulkanContext::prepare_buffers() {
 				// Swapchain is not as optimal as it could be, but the platform's
 				// presentation engine will still present the image correctly.
 				print_verbose("Vulkan: Early suboptimal swapchain, recreating.");
-				_update_swap_chain(w);
-				break;
+				Error swap_chain_err = _update_swap_chain(w);
+				if (swap_chain_err == ERR_SKIP) {
+					break;
+				}
 			} else if (err != VK_SUCCESS) {
 				ERR_BREAK_MSG(err != VK_SUCCESS, "Vulkan: Did not create swapchain successfully. Error code: " + String(string_VkResult(err)));
 			} else {

@@ -45,36 +45,42 @@
 
 #define CONTRIBUTE_URL vformat("%s/contributing/documentation/updating_the_class_reference.html", VERSION_DOCS_URL)
 
+#ifdef MODULE_MONO_ENABLED
+// Sync with the types mentioned in https://docs.godotengine.org/en/stable/tutorials/scripting/c_sharp/c_sharp_differences.html
+const Vector<String> classes_with_csharp_differences = {
+	"@GlobalScope",
+	"String",
+	"NodePath",
+	"Signal",
+	"Callable",
+	"RID",
+	"Basis",
+	"Transform2D",
+	"Transform3D",
+	"Rect2",
+	"Rect2i",
+	"AABB",
+	"Quaternion",
+	"Projection",
+	"Color",
+	"Array",
+	"Dictionary",
+	"PackedByteArray",
+	"PackedColorArray",
+	"PackedFloat32Array",
+	"PackedFloat64Array",
+	"PackedInt32Array",
+	"PackedInt64Array",
+	"PackedStringArray",
+	"PackedVector2Array",
+	"PackedVector3Array",
+	"Variant",
+};
+#endif
+
 // TODO: this is sometimes used directly as doc->something, other times as EditorHelp::get_doc_data(), which is thread-safe.
 // Might this be a problem?
 DocTools *EditorHelp::doc = nullptr;
-
-class DocCache : public Resource {
-	GDCLASS(DocCache, Resource);
-	RES_BASE_EXTENSION("doc_cache");
-
-	String version_hash;
-	Array classes;
-
-protected:
-	static void _bind_methods() {
-		ClassDB::bind_method(D_METHOD("set_version_hash", "version_hash"), &DocCache::set_version_hash);
-		ClassDB::bind_method(D_METHOD("get_version_hash"), &DocCache::get_version_hash);
-
-		ClassDB::bind_method(D_METHOD("set_classes", "classes"), &DocCache::set_classes);
-		ClassDB::bind_method(D_METHOD("get_classes"), &DocCache::get_classes);
-
-		ADD_PROPERTY(PropertyInfo(Variant::STRING, "version_hash"), "set_version_hash", "get_version_hash");
-		ADD_PROPERTY(PropertyInfo(Variant::ARRAY, "classes"), "set_classes", "get_classes");
-	}
-
-public:
-	String get_version_hash() const { return version_hash; }
-	void set_version_hash(const String &p_version_hash) { version_hash = p_version_hash; }
-
-	Array get_classes() const { return classes; }
-	void set_classes(const Array &p_classes) { classes = p_classes; }
-};
 
 static bool _attempt_doc_load(const String &p_class) {
 	// Docgen always happens in the outer-most class: it also generates docs for inner classes.
@@ -308,7 +314,7 @@ void EditorHelp::_add_type(const String &p_type, const String &p_enum, bool p_is
 	bool can_ref = !p_type.contains("*") || is_enum_type;
 
 	String link_t = p_type; // For links in metadata
-	String display_t = link_t; // For display purposes
+	String display_t; // For display purposes.
 	if (is_enum_type) {
 		link_t = p_enum; // The link for enums is always the full enum description
 		display_t = _contextualize_class_specifier(p_enum, edited_class);
@@ -888,10 +894,26 @@ void EditorHelp::_update_doc() {
 			class_desc->append_text(TTR("There is currently no description for this class. Please help us by [color=$color][url=$url]contributing one[/url][/color]!").replace("$url", CONTRIBUTE_URL).replace("$color", link_color_text));
 		}
 
-		class_desc->pop();
 		class_desc->add_newline();
 		class_desc->add_newline();
 	}
+
+#ifdef MODULE_MONO_ENABLED
+	if (classes_with_csharp_differences.has(cd.name)) {
+		const String &csharp_differences_url = vformat("%s/tutorials/scripting/c_sharp/c_sharp_differences.html", VERSION_DOCS_URL);
+
+		class_desc->push_color(theme_cache.text_color);
+		_push_normal_font();
+		class_desc->push_indent(1);
+		_add_text("[b]" + TTR("Note:") + "[/b] " + vformat(TTR("There are notable differences when using this API with C#. See [url=%s]C# API differences to GDScript[/url] for more information."), csharp_differences_url));
+		class_desc->pop();
+		_pop_normal_font();
+		class_desc->pop();
+
+		class_desc->add_newline();
+		class_desc->add_newline();
+	}
+#endif
 
 	// Online tutorials
 	if (cd.tutorials.size()) {
@@ -1037,6 +1059,7 @@ void EditorHelp::_update_doc() {
 			if (cd.properties[i].is_deprecated) {
 				DEPRECATED_DOC_TAG;
 			}
+
 			if (cd.properties[i].is_experimental) {
 				EXPERIMENTAL_DOC_TAG;
 			}
@@ -1281,6 +1304,7 @@ void EditorHelp::_update_doc() {
 			if (cd.signals[i].is_deprecated) {
 				DEPRECATED_DOC_TAG;
 			}
+
 			if (cd.signals[i].is_experimental) {
 				EXPERIMENTAL_DOC_TAG;
 			}
@@ -1341,6 +1365,7 @@ void EditorHelp::_update_doc() {
 				enum_line[E.key] = class_desc->get_paragraph_count() - 2;
 
 				_push_code_font();
+
 				class_desc->push_color(theme_cache.title_color);
 				if (E.value.size() && E.value[0].is_bitfield) {
 					class_desc->add_text("flags  ");
@@ -1357,21 +1382,32 @@ void EditorHelp::_update_doc() {
 				class_desc->push_color(theme_cache.headline_color);
 				class_desc->add_text(e);
 				class_desc->pop();
-				_pop_code_font();
 
 				class_desc->push_color(theme_cache.symbol_color);
 				class_desc->add_text(":");
 				class_desc->pop();
 
+				if (cd.enums.has(e)) {
+					if (cd.enums[e].is_deprecated) {
+						DEPRECATED_DOC_TAG;
+					}
+
+					if (cd.enums[e].is_experimental) {
+						EXPERIMENTAL_DOC_TAG;
+					}
+				}
+
+				_pop_code_font();
+
 				class_desc->add_newline();
 				class_desc->add_newline();
 
 				// Enum description.
-				if (e != "@unnamed_enums" && cd.enums.has(e)) {
+				if (e != "@unnamed_enums" && cd.enums.has(e) && !cd.enums[e].description.strip_edges().is_empty()) {
 					class_desc->push_color(theme_cache.text_color);
 					_push_normal_font();
 					class_desc->push_indent(1);
-					_add_text(cd.enums[e]);
+					_add_text(cd.enums[e].description);
 					class_desc->pop();
 					_pop_normal_font();
 					class_desc->pop();
@@ -1395,6 +1431,7 @@ void EditorHelp::_update_doc() {
 					constant_line[enum_list[i].name] = class_desc->get_paragraph_count() - 2;
 
 					_push_code_font();
+
 					_add_bulletpoint();
 					class_desc->push_color(theme_cache.headline_color);
 					_add_text(enum_list[i].name);
@@ -1405,7 +1442,6 @@ void EditorHelp::_update_doc() {
 					class_desc->push_color(theme_cache.value_color);
 					_add_text(_fix_constant(enum_list[i].value));
 					class_desc->pop();
-					_pop_code_font();
 
 					if (enum_list[i].is_deprecated) {
 						DEPRECATED_DOC_TAG;
@@ -1414,6 +1450,8 @@ void EditorHelp::_update_doc() {
 					if (enum_list[i].is_experimental) {
 						EXPERIMENTAL_DOC_TAG;
 					}
+
+					_pop_code_font();
 
 					class_desc->add_newline();
 
@@ -1481,8 +1519,6 @@ void EditorHelp::_update_doc() {
 				_add_text(_fix_constant(constants[i].value));
 				class_desc->pop();
 
-				_pop_code_font();
-
 				if (constants[i].is_deprecated) {
 					DEPRECATED_DOC_TAG;
 				}
@@ -1490,6 +1526,8 @@ void EditorHelp::_update_doc() {
 				if (constants[i].is_experimental) {
 					EXPERIMENTAL_DOC_TAG;
 				}
+
+				_pop_code_font();
 
 				class_desc->add_newline();
 
@@ -1670,6 +1708,7 @@ void EditorHelp::_update_doc() {
 			if (cd.properties[i].is_deprecated) {
 				DEPRECATED_DOC_TAG;
 			}
+
 			if (cd.properties[i].is_experimental) {
 				EXPERIMENTAL_DOC_TAG;
 			}
@@ -1906,7 +1945,7 @@ void EditorHelp::_help_callback(const String &p_topic) {
 	}
 }
 
-static void _add_text_to_rt(const String &p_bbcode, RichTextLabel *p_rt, Control *p_owner_node) {
+static void _add_text_to_rt(const String &p_bbcode, RichTextLabel *p_rt, Control *p_owner_node, const String &p_class = "") {
 	DocTools *doc = EditorHelp::get_doc_data();
 	String base_path;
 
@@ -2107,21 +2146,28 @@ static void _add_text_to_rt(const String &p_bbcode, RichTextLabel *p_rt, Control
 			p_rt->pop(); // font
 			pos = brk_end + 1;
 
+		} else if (tag == p_class) {
+			// Use a bold font when class reference tags are in their own page.
+			p_rt->push_font(doc_bold_font);
+			p_rt->add_text(tag);
+			p_rt->pop();
+
+			pos = brk_end + 1;
+
 		} else if (doc->class_list.has(tag)) {
-			// Class reference tag such as [Node2D] or [SceneTree].
-			// Use monospace font to make clickable references
-			// easier to distinguish from inline code and other text.
+			// Use a monospace font for class reference tags such as [Node2D] or [SceneTree].
+
 			p_rt->push_font(doc_code_font);
 			p_rt->push_font_size(doc_code_font_size);
-
 			p_rt->push_color(type_color);
 			p_rt->push_meta("#" + tag);
 			p_rt->add_text(tag);
-			p_rt->pop();
-			p_rt->pop();
 
-			p_rt->pop(); // font size
-			p_rt->pop(); // font
+			p_rt->pop();
+			p_rt->pop();
+			p_rt->pop(); // Font size
+			p_rt->pop(); // Font
+
 			pos = brk_end + 1;
 
 		} else if (tag == "b") {
@@ -2252,7 +2298,7 @@ static void _add_text_to_rt(const String &p_bbcode, RichTextLabel *p_rt, Control
 }
 
 void EditorHelp::_add_text(const String &p_bbcode) {
-	_add_text_to_rt(p_bbcode, class_desc, this);
+	_add_text_to_rt(p_bbcode, class_desc, this, edited_class);
 }
 
 Thread EditorHelp::thread;
@@ -2264,21 +2310,23 @@ void EditorHelp::_wait_for_thread() {
 }
 
 String EditorHelp::get_cache_full_path() {
-	return EditorPaths::get_singleton()->get_cache_dir().path_join("editor.doc_cache");
+	return EditorPaths::get_singleton()->get_cache_dir().path_join("editor_doc_cache.res");
 }
 
 static bool first_attempt = true;
 
 static String _compute_doc_version_hash() {
-	return vformat("%d/%d/%s", ClassDB::get_api_hash(ClassDB::API_CORE), ClassDB::get_api_hash(ClassDB::API_EDITOR), _doc_data_hash);
+	uint32_t version_hash = Engine::get_singleton()->get_version_info().hash();
+	return vformat("%d/%d/%d/%s", version_hash, ClassDB::get_api_hash(ClassDB::API_CORE), ClassDB::get_api_hash(ClassDB::API_EDITOR), _doc_data_hash);
 }
 
 void EditorHelp::_load_doc_thread(void *p_udata) {
 	DEV_ASSERT(first_attempt);
-	Ref<DocCache> cache_res = ResourceLoader::load(get_cache_full_path());
-	if (cache_res.is_valid() && cache_res->get_version_hash() == _compute_doc_version_hash()) {
-		for (int i = 0; i < cache_res->get_classes().size(); i++) {
-			doc->add_doc(DocData::ClassDoc::from_dict(cache_res->get_classes()[i]));
+	Ref<Resource> cache_res = ResourceLoader::load(get_cache_full_path());
+	if (cache_res.is_valid() && cache_res->get_meta("version_hash", "") == _compute_doc_version_hash()) {
+		Array classes = cache_res->get_meta("classes", Array());
+		for (int i = 0; i < classes.size(); i++) {
+			doc->add_doc(DocData::ClassDoc::from_dict(classes[i]));
 		}
 	} else {
 		// We have to go back to the main thread to start from scratch.
@@ -2292,14 +2340,14 @@ void EditorHelp::_gen_doc_thread(void *p_udata) {
 	compdoc.load_compressed(_doc_data_compressed, _doc_data_compressed_size, _doc_data_uncompressed_size);
 	doc->merge_from(compdoc); // Ensure all is up to date.
 
-	Ref<DocCache> cache_res;
+	Ref<Resource> cache_res;
 	cache_res.instantiate();
-	cache_res->set_version_hash(_compute_doc_version_hash());
+	cache_res->set_meta("version_hash", _compute_doc_version_hash());
 	Array classes;
 	for (const KeyValue<String, DocData::ClassDoc> &E : doc->class_list) {
 		classes.push_back(DocData::ClassDoc::to_dict(E.value));
 	}
-	cache_res->set_classes(classes);
+	cache_res->set_meta("classes", classes);
 	Error err = ResourceSaver::save(cache_res, get_cache_full_path(), ResourceSaver::FLAG_COMPRESS);
 	if (err) {
 		ERR_PRINT("Cannot save editor help cache (" + get_cache_full_path() + ").");
@@ -2309,9 +2357,6 @@ void EditorHelp::_gen_doc_thread(void *p_udata) {
 static bool doc_gen_use_threads = true;
 
 void EditorHelp::generate_doc(bool p_use_cache) {
-	// Temporarily disable use of cache for pre-RC stabilization.
-	p_use_cache = false;
-
 	OS::get_singleton()->benchmark_begin_measure("EditorHelp::generate_doc");
 	if (doc_gen_use_threads) {
 		// In case not the first attempt.

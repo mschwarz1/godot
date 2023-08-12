@@ -659,7 +659,7 @@ ShaderLanguage::Token ShaderLanguage::_get_token() {
 							char t = char(i);
 
 							suffix_lut[CASE_ALL][i] = t == '.' || t == 'x' || t == 'e' || t == 'f' || t == 'u' || t == '-' || t == '+';
-							suffix_lut[CASE_HEXA_PERIOD][i] = t == 'e' || t == 'f';
+							suffix_lut[CASE_HEXA_PERIOD][i] = t == 'e' || t == 'f' || t == 'u';
 							suffix_lut[CASE_EXPONENT][i] = t == 'f' || t == '-' || t == '+';
 							suffix_lut[CASE_SIGN_AFTER_EXPONENT][i] = t == 'f';
 							suffix_lut[CASE_NONE][i] = false;
@@ -738,6 +738,13 @@ ShaderLanguage::Token ShaderLanguage::_get_token() {
 					char32_t last_char = str[str.length() - 1];
 
 					if (hexa_found) { // Integer (hex).
+						if (uint_suffix_found) {
+							// Strip the suffix.
+							str = str.left(str.length() - 1);
+
+							// Compensate reading cursor position.
+							char_idx += 1;
+						}
 						if (str.size() > 11 || !str.is_valid_hex_number(true)) { // > 0xFFFFFFFF
 							return _make_token(TK_ERROR, "Invalid (hexadecimal) numeric constant");
 						}
@@ -3381,12 +3388,14 @@ bool ShaderLanguage::_validate_function_call(BlockNode *p_block, const FunctionI
 	}
 
 	int last_arg_count = 0;
+	bool exists = false;
 	String arg_list = "";
 
 	for (int i = 0; i < shader->functions.size(); i++) {
 		if (name != shader->functions[i].name) {
 			continue;
 		}
+		exists = true;
 
 		if (!shader->functions[i].callable) {
 			_set_error(vformat(RTR("Function '%s' can't be called from source code."), String(name)));
@@ -3487,10 +3496,12 @@ bool ShaderLanguage::_validate_function_call(BlockNode *p_block, const FunctionI
 		}
 	}
 
-	if (last_arg_count > args.size()) {
-		_set_error(vformat(RTR("Too few arguments for \"%s(%s)\" call. Expected at least %d but received %d."), String(name), arg_list, last_arg_count, args.size()));
-	} else if (last_arg_count < args.size()) {
-		_set_error(vformat(RTR("Too many arguments for \"%s(%s)\" call. Expected at most %d but received %d."), String(name), arg_list, last_arg_count, args.size()));
+	if (exists) {
+		if (last_arg_count > args.size()) {
+			_set_error(vformat(RTR("Too few arguments for \"%s(%s)\" call. Expected at least %d but received %d."), String(name), arg_list, last_arg_count, args.size()));
+		} else if (last_arg_count < args.size()) {
+			_set_error(vformat(RTR("Too many arguments for \"%s(%s)\" call. Expected at most %d but received %d."), String(name), arg_list, last_arg_count, args.size()));
+		}
 	}
 
 	return false;
@@ -8612,7 +8623,12 @@ Error ShaderLanguage::_parse_shader(const HashMap<StringName, FunctionInfo> &p_f
 							}
 
 							if (uniform.array_size > 0) {
-								if (tk.type != TK_HINT_SOURCE_COLOR) {
+								static Vector<int> supported_hints = {
+									TK_HINT_SOURCE_COLOR, TK_REPEAT_DISABLE, TK_REPEAT_ENABLE,
+									TK_FILTER_LINEAR, TK_FILTER_LINEAR_MIPMAP, TK_FILTER_LINEAR_MIPMAP_ANISOTROPIC,
+									TK_FILTER_NEAREST, TK_FILTER_NEAREST_MIPMAP, TK_FILTER_NEAREST_MIPMAP_ANISOTROPIC
+								};
+								if (!supported_hints.has(tk.type)) {
 									_set_error(RTR("This hint is not supported for uniform arrays."));
 									return ERR_PARSE_ERROR;
 								}
@@ -8800,8 +8816,8 @@ Error ShaderLanguage::_parse_shader(const HashMap<StringName, FunctionInfo> &p_f
 									new_hint = ShaderNode::Uniform::HINT_NORMAL_ROUGHNESS_TEXTURE;
 									--texture_uniforms;
 									--texture_binding;
-									if (OS::get_singleton()->get_current_rendering_method() == "gl_compatibility") {
-										_set_error(RTR("'hint_normal_roughness_texture' is not supported in gl_compatibility shaders."));
+									if (OS::get_singleton()->get_current_rendering_method() != "forward_plus") {
+										_set_error(RTR("'hint_normal_roughness_texture' is only available when using the Forward+ backend."));
 										return ERR_PARSE_ERROR;
 									}
 									if (String(shader_type_identifier) != "spatial") {
@@ -10537,19 +10553,23 @@ Error ShaderLanguage::complete(const String &p_code, const ShaderCompileInfo &p_
 				}
 			} else if ((int(completion_base) > int(TYPE_MAT4) && int(completion_base) < int(TYPE_STRUCT))) {
 				Vector<String> options;
+				if (current_uniform_filter == FILTER_DEFAULT) {
+					options.push_back("filter_linear");
+					options.push_back("filter_linear_mipmap");
+					options.push_back("filter_linear_mipmap_anisotropic");
+					options.push_back("filter_nearest");
+					options.push_back("filter_nearest_mipmap");
+					options.push_back("filter_nearest_mipmap_anisotropic");
+				}
+				if (current_uniform_repeat == REPEAT_DEFAULT) {
+					options.push_back("repeat_enable");
+					options.push_back("repeat_disable");
+				}
 				if (completion_base_array) {
 					if (current_uniform_hint == ShaderNode::Uniform::HINT_NONE) {
 						options.push_back("source_color");
 					}
 				} else {
-					if (current_uniform_filter == FILTER_DEFAULT) {
-						options.push_back("filter_linear");
-						options.push_back("filter_linear_mipmap");
-						options.push_back("filter_linear_mipmap_anisotropic");
-						options.push_back("filter_nearest");
-						options.push_back("filter_nearest_mipmap");
-						options.push_back("filter_nearest_mipmap_anisotropic");
-					}
 					if (current_uniform_hint == ShaderNode::Uniform::HINT_NONE) {
 						options.push_back("hint_anisotropy");
 						options.push_back("hint_default_black");
@@ -10566,10 +10586,6 @@ Error ShaderLanguage::complete(const String &p_code, const ShaderCompileInfo &p_
 						options.push_back("hint_normal_roughness_texture");
 						options.push_back("hint_depth_texture");
 						options.push_back("source_color");
-					}
-					if (current_uniform_repeat == REPEAT_DEFAULT) {
-						options.push_back("repeat_enable");
-						options.push_back("repeat_disable");
 					}
 				}
 
