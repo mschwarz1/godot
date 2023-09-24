@@ -35,8 +35,23 @@
 #include "core/os/keyboard.h"
 #include "core/os/os.h"
 
+
+void InputHandle::set_handled(bool p_handled) {
+	MutexLock lock(mutex);
+	handled = p_handled;
+}
+
+bool InputHandle::get_handled() const {
+	MutexLock lock(mutex);
+	return handled;
+}
+
 const int InputEvent::DEVICE_ID_EMULATION = -1;
 const int InputEvent::DEVICE_ID_INTERNAL = -2;
+
+InputEvent::InputEvent() : handle(memnew(InputHandle))
+{
+}
 
 void InputEvent::set_device(int p_device) {
 	device = p_device;
@@ -107,9 +122,28 @@ bool InputEvent::is_action_type() const {
 	return false;
 }
 
+void InputEvent::set_handle(Ref<InputHandle> p_handle) {
+	handle = p_handle;
+}
+
+Ref<InputHandle> InputEvent::get_handle() const {
+	return handle;
+}
+
+void InputEvent::set_handled(bool p_handled) {
+	handle->set_handled(p_handled);
+}
+
+bool InputEvent::is_handled() const {
+	return handle->get_handled();
+}
+
 void InputEvent::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("set_device", "device"), &InputEvent::set_device);
 	ClassDB::bind_method(D_METHOD("get_device"), &InputEvent::get_device);
+	
+	ClassDB::bind_method(D_METHOD("set_handled", "handled"), &InputEvent::set_handled);
+	ClassDB::bind_method(D_METHOD("is_handled"), &InputEvent::is_handled);
 
 	ClassDB::bind_method(D_METHOD("is_action", "action", "exact_match"), &InputEvent::is_action, DEFVAL(false));
 	ClassDB::bind_method(D_METHOD("is_action_pressed", "action", "allow_echo", "exact_match"), &InputEvent::is_action_pressed, DEFVAL(false), DEFVAL(false));
@@ -132,6 +166,7 @@ void InputEvent::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("xformed_by", "xform", "local_ofs"), &InputEvent::xformed_by, DEFVAL(Vector2()));
 
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "device"), "set_device", "get_device");
+	//ADD_PROPERTY(PropertyInfo(Variant::BOOL, "handled"), "set_handled", "is_handled");
 }
 
 ///////////////////////////////////
@@ -699,10 +734,11 @@ Ref<InputEvent> InputEventMouseButton::xformed_by(const Transform2D &p_xform, co
 	mb->set_device(get_device());
 	mb->set_window_id(get_window_id());
 	mb->set_modifiers_from_event(this);
+	Ref<InputHandle> existing_handle = get_handle();
+	mb->set_handle(existing_handle);
 
 	mb->set_position(l);
 	mb->set_global_position(g);
-
 	mb->set_button_mask(get_button_mask());
 	mb->set_pressed(pressed);
 	mb->set_canceled(canceled);
@@ -907,6 +943,7 @@ Ref<InputEvent> InputEventMouseMotion::xformed_by(const Transform2D &p_xform, co
 	mm->set_pen_inverted(get_pen_inverted());
 	mm->set_tilt(get_tilt());
 	mm->set_global_position(get_global_position());
+	mm->set_handle(get_handle());
 
 	mm->set_button_mask(get_button_mask());
 	mm->set_relative(p_xform.basis_xform(get_relative()));
@@ -1292,6 +1329,7 @@ Ref<InputEvent> InputEventScreenTouch::xformed_by(const Transform2D &p_xform, co
 	st->set_position(p_xform.xform(pos + p_local_ofs));
 	st->set_pressed(pressed);
 	st->set_canceled(canceled);
+	st->set_handle(get_handle());
 	st->set_double_tap(double_tap);
 
 	return st;
@@ -1403,6 +1441,8 @@ Ref<InputEvent> InputEventScreenDrag::xformed_by(const Transform2D &p_xform, con
 	sd->set_position(p_xform.xform(pos + p_local_ofs));
 	sd->set_relative(p_xform.basis_xform(relative));
 	sd->set_velocity(p_xform.basis_xform(velocity));
+	sd->set_handle(get_handle());
+
 
 	return sd;
 }
@@ -1592,6 +1632,7 @@ Ref<InputEvent> InputEventMagnifyGesture::xformed_by(const Transform2D &p_xform,
 
 	ev->set_position(p_xform.xform(get_position() + p_local_ofs));
 	ev->set_factor(get_factor());
+   	ev->set_handle(get_handle());
 
 	return ev;
 }
@@ -1632,6 +1673,7 @@ Ref<InputEvent> InputEventPanGesture::xformed_by(const Transform2D &p_xform, con
 
 	ev->set_position(p_xform.xform(get_position() + p_local_ofs));
 	ev->set_delta(get_delta());
+	ev->set_handle(get_handle());
 
 	return ev;
 }

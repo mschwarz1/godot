@@ -133,7 +133,7 @@ void SubViewportContainer::_notification(int p_what) {
 		} break;
 
 		case NOTIFICATION_DRAW: {
-			for (int i = 0; i < get_child_count(); i++) {
+			for (int i = get_child_count() - 1; i >= 0 ; i--) {
 				SubViewport *c = Object::cast_to<SubViewport>(get_child(i));
 				if (!c) {
 					continue;

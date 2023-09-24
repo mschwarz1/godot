@@ -37,6 +37,7 @@
 #include "core/os/keyboard.h"
 #include "core/string/ustring.h"
 #include "core/typedefs.h"
+#include "core/os/mutex.h"
 
 /**
  * Input Event classes. These are used in the main loop.
@@ -44,6 +45,16 @@
  */
 
 class Shortcut;
+
+class InputHandle : public RefCounted {
+protected:
+	bool handled;
+	BinaryMutex mutex;
+public:
+	void set_handled(bool p_handled);
+	bool get_handled() const;
+	InputHandle() { handled = false;}
+};
 
 /**
  * Input Modifier Status
@@ -56,6 +67,7 @@ class InputEvent : public Resource {
 	int device = 0;
 
 protected:
+    Ref<InputHandle> handle;
 	bool canceled = false;
 	bool pressed = false;
 
@@ -75,6 +87,10 @@ public:
 	float get_action_raw_strength(const StringName &p_action, bool p_exact_match = false) const;
 
 	bool is_canceled() const;
+	void set_handled(bool isHandled);
+	void set_handle(Ref<InputHandle> p_handle);
+	Ref<InputHandle> get_handle() const;
+	bool is_handled() const;
 	bool is_pressed() const;
 	bool is_released() const;
 	virtual bool is_echo() const;
@@ -90,7 +106,7 @@ public:
 
 	virtual bool accumulate(const Ref<InputEvent> &p_event) { return false; }
 
-	InputEvent() {}
+	InputEvent();
 };
 
 class InputEventFromWindow : public InputEvent {
