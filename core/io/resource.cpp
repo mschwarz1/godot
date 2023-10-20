@@ -239,6 +239,7 @@ void Resource::configure_for_local_scene(Node *p_for_scene, HashMap<Ref<Resource
 	List<PropertyInfo> plist;
 	get_property_list(&plist);
 
+	reset_local_to_scene();
 	local_scene = p_for_scene;
 
 	for (const PropertyInfo &E : plist) {
@@ -378,8 +379,12 @@ Node *Resource::get_local_scene() const {
 }
 
 void Resource::setup_local_to_scene() {
-	// Can't use GDVIRTUAL in Resource, so this will have to be done with a signal
 	emit_signal(SNAME("setup_local_to_scene_requested"));
+	GDVIRTUAL_CALL(_setup_local_to_scene);
+}
+
+void Resource::reset_local_to_scene() {
+	// Restores the state as if setup_local_to_scene() hadn't been called.
 }
 
 Node *(*Resource::_get_local_scene_func)() = nullptr;
@@ -455,6 +460,7 @@ void Resource::_bind_methods() {
 	get_rid_bind.return_val.type = Variant::RID;
 
 	::ClassDB::add_virtual_method(get_class_static(), get_rid_bind, true, Vector<String>(), true);
+	GDVIRTUAL_BIND(_setup_local_to_scene);
 }
 
 Resource::Resource() :

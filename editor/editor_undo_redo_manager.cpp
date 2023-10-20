@@ -70,7 +70,7 @@ int EditorUndoRedoManager::get_history_id_for_object(Object *p_object) const {
 		Node *edited_scene = EditorNode::get_singleton()->get_edited_scene();
 
 		if (edited_scene && (node == edited_scene || edited_scene->is_ancestor_of(node))) {
-			int idx = EditorNode::get_singleton()->get_editor_data().get_current_edited_scene_history_id();
+			int idx = EditorNode::get_editor_data().get_current_edited_scene_history_id();
 			if (idx > 0) {
 				history_id = idx;
 			}
@@ -80,12 +80,12 @@ int EditorUndoRedoManager::get_history_id_for_object(Object *p_object) const {
 	if (Resource *res = Object::cast_to<Resource>(p_object)) {
 		if (res->is_built_in()) {
 			if (res->get_path().is_empty()) {
-				int idx = EditorNode::get_singleton()->get_editor_data().get_current_edited_scene_history_id();
+				int idx = EditorNode::get_editor_data().get_current_edited_scene_history_id();
 				if (idx > 0) {
 					history_id = idx;
 				}
 			} else {
-				int idx = EditorNode::get_singleton()->get_editor_data().get_scene_history_id_from_path(res->get_path().get_slice("::", 0));
+				int idx = EditorNode::get_editor_data().get_scene_history_id_from_path(res->get_path().get_slice("::", 0));
 				if (idx > 0) {
 					history_id = idx;
 				}
@@ -156,7 +156,7 @@ void EditorUndoRedoManager::add_undo_methodp(Object *p_object, const StringName 
 void EditorUndoRedoManager::_add_do_method(const Variant **p_args, int p_argcount, Callable::CallError &r_error) {
 	if (p_argcount < 2) {
 		r_error.error = Callable::CallError::CALL_ERROR_TOO_FEW_ARGUMENTS;
-		r_error.argument = 0;
+		r_error.expected = 2;
 		return;
 	}
 
@@ -185,7 +185,7 @@ void EditorUndoRedoManager::_add_do_method(const Variant **p_args, int p_argcoun
 void EditorUndoRedoManager::_add_undo_method(const Variant **p_args, int p_argcount, Callable::CallError &r_error) {
 	if (p_argcount < 2) {
 		r_error.error = Callable::CallError::CALL_ERROR_TOO_FEW_ARGUMENTS;
-		r_error.argument = 0;
+		r_error.expected = 2;
 		return;
 	}
 

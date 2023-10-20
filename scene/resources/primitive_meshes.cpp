@@ -181,7 +181,7 @@ TypedArray<Array> PrimitiveMesh::surface_get_blend_shape_arrays(int p_surface) c
 BitField<Mesh::ArrayFormat> PrimitiveMesh::surface_get_format(int p_idx) const {
 	ERR_FAIL_INDEX_V(p_idx, 1, 0);
 
-	uint32_t mesh_format = RS::ARRAY_FORMAT_VERTEX | RS::ARRAY_FORMAT_NORMAL | RS::ARRAY_FORMAT_TANGENT | RS::ARRAY_FORMAT_TEX_UV | RS::ARRAY_FORMAT_INDEX;
+	uint64_t mesh_format = RS::ARRAY_FORMAT_VERTEX | RS::ARRAY_FORMAT_NORMAL | RS::ARRAY_FORMAT_TANGENT | RS::ARRAY_FORMAT_TEX_UV | RS::ARRAY_FORMAT_INDEX;
 	if (add_uv2) {
 		mesh_format |= RS::ARRAY_FORMAT_TEX_UV2;
 	}
@@ -2907,9 +2907,6 @@ void TextMesh::_create_mesh_array(Array &p_arr) const {
 
 		String txt = (uppercase) ? TS->string_to_upper(xl_text, language) : xl_text;
 		TS->shaped_text_add_string(text_rid, txt, font->get_rids(), font_size, font->get_opentype_features(), language);
-		for (int i = 0; i < TextServer::SPACING_MAX; i++) {
-			TS->shaped_text_set_spacing(text_rid, TextServer::SpacingType(i), font->get_spacing(TextServer::SpacingType(i)));
-		}
 
 		TypedArray<Vector3i> stt;
 		if (st_parser == TextServer::STRUCTURED_TEXT_CUSTOM) {
@@ -2926,9 +2923,6 @@ void TextMesh::_create_mesh_array(Array &p_arr) const {
 		int spans = TS->shaped_get_span_count(text_rid);
 		for (int i = 0; i < spans; i++) {
 			TS->shaped_set_span_update_font(text_rid, i, font->get_rids(), font_size, font->get_opentype_features());
-		}
-		for (int i = 0; i < TextServer::SPACING_MAX; i++) {
-			TS->shaped_text_set_spacing(text_rid, TextServer::SpacingType(i), font->get_spacing(TextServer::SpacingType(i)));
 		}
 
 		dirty_font = false;
@@ -3466,32 +3460,24 @@ Ref<Font> TextMesh::_get_font_or_default() const {
 		return font_override;
 	}
 
-	// Check the project-defined Theme resource.
-	if (ThemeDB::get_singleton()->get_project_theme().is_valid()) {
-		List<StringName> theme_types;
-		ThemeDB::get_singleton()->get_project_theme()->get_type_dependencies(get_class_name(), StringName(), &theme_types);
+	StringName theme_name = "font";
+	List<StringName> theme_types;
+	ThemeDB::get_singleton()->get_native_type_dependencies(get_class_name(), &theme_types);
+
+	ThemeContext *global_context = ThemeDB::get_singleton()->get_default_theme_context();
+	for (const Ref<Theme> &theme : global_context->get_themes()) {
+		if (theme.is_null()) {
+			continue;
+		}
 
 		for (const StringName &E : theme_types) {
-			if (ThemeDB::get_singleton()->get_project_theme()->has_theme_item(Theme::DATA_TYPE_FONT, "font", E)) {
-				return ThemeDB::get_singleton()->get_project_theme()->get_theme_item(Theme::DATA_TYPE_FONT, "font", E);
+			if (theme->has_font(theme_name, E)) {
+				return theme->get_font(theme_name, E);
 			}
 		}
 	}
 
-	// Lastly, fall back on the items defined in the default Theme, if they exist.
-	{
-		List<StringName> theme_types;
-		ThemeDB::get_singleton()->get_default_theme()->get_type_dependencies(get_class_name(), StringName(), &theme_types);
-
-		for (const StringName &E : theme_types) {
-			if (ThemeDB::get_singleton()->get_default_theme()->has_theme_item(Theme::DATA_TYPE_FONT, "font", E)) {
-				return ThemeDB::get_singleton()->get_default_theme()->get_theme_item(Theme::DATA_TYPE_FONT, "font", E);
-			}
-		}
-	}
-
-	// If they don't exist, use any type to return the default/empty value.
-	return ThemeDB::get_singleton()->get_default_theme()->get_theme_item(Theme::DATA_TYPE_FONT, "font", StringName());
+	return global_context->get_fallback_theme()->get_font(theme_name, StringName());
 }
 
 void TextMesh::set_font_size(int p_size) {

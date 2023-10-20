@@ -68,8 +68,6 @@
 
 #include <stdint.h>
 
-#define CACHED_STRING_NAME(m_var) (CSharpLanguage::get_singleton()->get_string_names().m_var)
-
 // Types that will be skipped over (in favor of their base types) when setting up instance bindings.
 // This must be a superset of `ignored_types` in bindings_generator.cpp.
 const Vector<String> ignored_types = {};
@@ -123,16 +121,16 @@ void CSharpLanguage::init() {
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "dotnet/project/assembly_reload_attempts", PROPERTY_HINT_RANGE, "1,16,1,or_greater"), 3);
 #endif
 
-	gdmono = memnew(GDMono);
-	gdmono->initialize();
-
 #ifdef TOOLS_ENABLED
-	if (gdmono->is_runtime_initialized()) {
-		gdmono->initialize_load_assemblies();
-	}
-
 	EditorNode::add_init_callback(&_editor_init_callback);
 #endif
+
+	gdmono = memnew(GDMono);
+
+	// Initialize only if the project uses C#.
+	if (gdmono->should_initialize()) {
+		gdmono->initialize();
+	}
 }
 
 void CSharpLanguage::finish() {
@@ -330,6 +328,11 @@ void CSharpLanguage::get_comment_delimiters(List<String> *p_delimiters) const {
 	p_delimiters->push_back("/* */"); // delimited comment
 }
 
+void CSharpLanguage::get_doc_comment_delimiters(List<String> *p_delimiters) const {
+	p_delimiters->push_back("///"); // single-line doc comment
+	p_delimiters->push_back("/** */"); // delimited doc comment
+}
+
 void CSharpLanguage::get_string_delimiters(List<String> *p_delimiters) const {
 	p_delimiters->push_back("' '"); // character literal
 	p_delimiters->push_back("\" \""); // regular string literal
@@ -394,10 +397,6 @@ Script *CSharpLanguage::create_script() const {
 	return memnew(CSharpScript);
 }
 
-bool CSharpLanguage::has_named_classes() const {
-	return false;
-}
-
 bool CSharpLanguage::supports_builtin_mode() const {
 	return false;
 }
@@ -435,6 +434,11 @@ static String variant_type_to_managed_name(const String &p_var_type_name) {
 
 	if (p_var_type_name == Variant::get_type_name(Variant::DICTIONARY)) {
 		return "Collections.Dictionary";
+	}
+
+	if (p_var_type_name.begins_with(Variant::get_type_name(Variant::ARRAY) + "[")) {
+		String element_type = p_var_type_name.trim_prefix(Variant::get_type_name(Variant::ARRAY) + "[").trim_suffix("]");
+		return "Collections.Array<" + variant_type_to_managed_name(element_type) + ">";
 	}
 
 	if (p_var_type_name == Variant::get_type_name(Variant::ARRAY)) {
@@ -551,13 +555,13 @@ bool CSharpLanguage::handles_global_class_type(const String &p_type) const {
 
 String CSharpLanguage::get_global_class_name(const String &p_path, String *r_base_type, String *r_icon_path) const {
 	Ref<CSharpScript> scr = ResourceLoader::load(p_path, get_type());
-	if (!scr.is_valid() || !scr->valid || !scr->global_class) {
-		// Invalid script or the script is not a global class.
-		return String();
-	}
+	// Always assign r_base_type and r_icon_path, even if the script
+	// is not a global one. In the case that it is not a global script,
+	// return an empty string AFTER assigning the return parameters.
+	// See GDScriptLanguage::get_global_class_name() in modules/gdscript/gdscript.cpp
 
-	String name = scr->class_name;
-	if (unlikely(name.is_empty())) {
+	if (!scr.is_valid() || !scr->valid) {
+		// Invalid script.
 		return String();
 	}
 
@@ -584,7 +588,8 @@ String CSharpLanguage::get_global_class_name(const String &p_path, String *r_bas
 			*r_base_type = scr->get_instance_base_type();
 		}
 	}
-	return name;
+
+	return scr->global_class ? scr->class_name : String();
 }
 
 String CSharpLanguage::debug_get_error() const {
@@ -1656,7 +1661,8 @@ void CSharpInstance::get_property_list(List<PropertyInfo> *p_properties) const {
 		}
 	}
 
-	for (const PropertyInfo &prop : props) {
+	for (PropertyInfo &prop : props) {
+		validate_property(prop);
 		p_properties->push_back(prop);
 	}
 }
@@ -1685,13 +1691,31 @@ bool CSharpInstance::property_can_revert(const StringName &p_name) const {
 	Variant ret;
 	Callable::CallError call_error;
 	GDMonoCache::managed_callbacks.CSharpInstanceBridge_Call(
-			gchandle.get_intptr(), &CACHED_STRING_NAME(_property_can_revert), args, 1, &call_error, &ret);
+			gchandle.get_intptr(), &SNAME("_property_can_revert"), args, 1, &call_error, &ret);
 
 	if (call_error.error != Callable::CallError::CALL_OK) {
 		return false;
 	}
 
 	return (bool)ret;
+}
+
+void CSharpInstance::validate_property(PropertyInfo &p_property) const {
+	ERR_FAIL_COND(!script.is_valid());
+
+	Variant property_arg = (Dictionary)p_property;
+	const Variant *args[1] = { &property_arg };
+
+	Variant ret;
+	Callable::CallError call_error;
+	GDMonoCache::managed_callbacks.CSharpInstanceBridge_Call(
+			gchandle.get_intptr(), &SNAME("_validate_property"), args, 1, &call_error, &ret);
+
+	if (call_error.error != Callable::CallError::CALL_OK) {
+		return;
+	}
+
+	p_property = PropertyInfo::from_dict(property_arg);
 }
 
 bool CSharpInstance::property_get_revert(const StringName &p_name, Variant &r_ret) const {
@@ -1703,7 +1727,7 @@ bool CSharpInstance::property_get_revert(const StringName &p_name, Variant &r_re
 	Variant ret;
 	Callable::CallError call_error;
 	GDMonoCache::managed_callbacks.CSharpInstanceBridge_Call(
-			gchandle.get_intptr(), &CACHED_STRING_NAME(_property_get_revert), args, 1, &call_error, &ret);
+			gchandle.get_intptr(), &SNAME("_property_get_revert"), args, 1, &call_error, &ret);
 
 	if (call_error.error != Callable::CallError::CALL_OK) {
 		return false;
@@ -1959,7 +1983,7 @@ const Variant CSharpInstance::get_rpc_config() const {
 	return script->get_rpc_config();
 }
 
-void CSharpInstance::notification(int p_notification) {
+void CSharpInstance::notification(int p_notification, bool p_reversed) {
 	if (p_notification == Object::NOTIFICATION_PREDELETE) {
 		// When NOTIFICATION_PREDELETE is sent, we also take the chance to call Dispose().
 		// It's safe to call Dispose() multiple times and NOTIFICATION_PREDELETE is guaranteed
@@ -1977,7 +2001,7 @@ void CSharpInstance::notification(int p_notification) {
 			return;
 		}
 
-		_call_notification(p_notification);
+		_call_notification(p_notification, p_reversed);
 
 		GDMonoCache::managed_callbacks.CSharpInstanceBridge_CallDispose(
 				gchandle.get_intptr(), /* okIfNull */ false);
@@ -1985,19 +2009,17 @@ void CSharpInstance::notification(int p_notification) {
 		return;
 	}
 
-	_call_notification(p_notification);
+	_call_notification(p_notification, p_reversed);
 }
 
-void CSharpInstance::_call_notification(int p_notification) {
+void CSharpInstance::_call_notification(int p_notification, bool p_reversed) {
 	Variant arg = p_notification;
 	const Variant *args[1] = { &arg };
-	StringName method_name = SNAME("_notification");
-
-	Callable::CallError call_error;
 
 	Variant ret;
+	Callable::CallError call_error;
 	GDMonoCache::managed_callbacks.CSharpInstanceBridge_Call(
-			gchandle.get_intptr(), &method_name, args, 1, &call_error, &ret);
+			gchandle.get_intptr(), &SNAME("_notification"), args, 1, &call_error, &ret);
 }
 
 String CSharpInstance::to_string(bool *r_valid) {
@@ -2221,7 +2243,7 @@ bool CSharpScript::_update_exports(PlaceHolderScriptInstance *p_instance_to_upda
 }
 
 bool CSharpScript::_get(const StringName &p_name, Variant &r_ret) const {
-	if (p_name == CSharpLanguage::singleton->string_names._script_source) {
+	if (p_name == SNAME("script/source")) {
 		r_ret = get_source_code();
 		return true;
 	}
@@ -2230,7 +2252,7 @@ bool CSharpScript::_get(const StringName &p_name, Variant &r_ret) const {
 }
 
 bool CSharpScript::_set(const StringName &p_name, const Variant &p_value) {
-	if (p_name == CSharpLanguage::singleton->string_names._script_source) {
+	if (p_name == SNAME("script/source")) {
 		set_source_code(p_value);
 		reload();
 		return true;
@@ -2240,7 +2262,7 @@ bool CSharpScript::_set(const StringName &p_name, const Variant &p_value) {
 }
 
 void CSharpScript::_get_property_list(List<PropertyInfo> *p_properties) const {
-	p_properties->push_back(PropertyInfo(Variant::STRING, CSharpLanguage::singleton->string_names._script_source, PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NO_EDITOR | PROPERTY_USAGE_INTERNAL));
+	p_properties->push_back(PropertyInfo(Variant::STRING, SNAME("script/source"), PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NO_EDITOR | PROPERTY_USAGE_INTERNAL));
 }
 
 void CSharpScript::_bind_methods() {
@@ -2280,6 +2302,7 @@ void CSharpScript::reload_registered_script(Ref<CSharpScript> p_script) {
 void CSharpScript::update_script_class_info(Ref<CSharpScript> p_script) {
 	bool tool = false;
 	bool global_class = false;
+	bool abstract_class = false;
 
 	// TODO: Use GDExtension godot_dictionary
 	Array methods_array;
@@ -2293,12 +2316,13 @@ void CSharpScript::update_script_class_info(Ref<CSharpScript> p_script) {
 	String icon_path;
 	Ref<CSharpScript> base_script;
 	GDMonoCache::managed_callbacks.ScriptManagerBridge_UpdateScriptClassInfo(
-			p_script.ptr(), &class_name, &tool, &global_class, &icon_path,
+			p_script.ptr(), &class_name, &tool, &global_class, &abstract_class, &icon_path,
 			&methods_array, &rpc_functions_dict, &signals_dict, &base_script);
 
 	p_script->class_name = class_name;
 	p_script->tool = tool;
 	p_script->global_class = global_class;
+	p_script->abstract_class = abstract_class;
 	p_script->icon_path = icon_path;
 
 	p_script->rpc_config.clear();
@@ -2332,6 +2356,8 @@ void CSharpScript::update_script_class_info(Ref<CSharpScript> p_script) {
 			}
 			mi.arguments.push_back(arg_info);
 		}
+
+		mi.flags = (uint32_t)method_info_dict["flags"];
 
 		p_script->methods.set(push_index++, CSharpMethodInfo{ name, mi });
 	}
@@ -2386,7 +2412,7 @@ bool CSharpScript::can_instantiate() const {
 		ERR_FAIL_V_MSG(false, "Cannot instance script because the associated class could not be found. Script: '" + get_path() + "'. Make sure the script exists and contains a class definition with a name that matches the filename of the script exactly (it's case-sensitive).");
 	}
 
-	return valid && extra_cond;
+	return valid && !abstract_class && extra_cond;
 }
 
 StringName CSharpScript::get_instance_base_type() const {
@@ -2580,6 +2606,18 @@ MethodInfo CSharpScript::get_method_info(const StringName &p_method) const {
 	}
 
 	return MethodInfo();
+}
+
+Variant CSharpScript::callp(const StringName &p_method, const Variant **p_args, int p_argcount, Callable::CallError &r_error) {
+	ERR_FAIL_COND_V(!valid, Variant());
+
+	Variant ret;
+	bool ok = GDMonoCache::managed_callbacks.ScriptManagerBridge_CallStatic(this, &p_method, p_args, p_argcount, &r_error, &ret);
+	if (ok) {
+		return ret;
+	}
+
+	return Script::callp(p_method, p_args, p_argcount, r_error);
 }
 
 Error CSharpScript::reload(bool p_keep_state) {
@@ -2886,10 +2924,4 @@ void ResourceFormatSaverCSharpScript::get_recognized_extensions(const Ref<Resour
 
 bool ResourceFormatSaverCSharpScript::recognize(const Ref<Resource> &p_resource) const {
 	return Object::cast_to<CSharpScript>(p_resource.ptr()) != nullptr;
-}
-
-CSharpLanguage::StringNameCache::StringNameCache() {
-	_property_can_revert = StaticCString::create("_property_can_revert");
-	_property_get_revert = StaticCString::create("_property_get_revert");
-	_script_source = StaticCString::create("script/source");
 }

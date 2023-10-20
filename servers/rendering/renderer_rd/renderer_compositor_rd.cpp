@@ -103,8 +103,9 @@ void RendererCompositorRD::begin_frame(double frame_step) {
 }
 
 void RendererCompositorRD::end_frame(bool p_swap_buffers) {
-	// TODO: Likely pass a bool to swap buffers to avoid display?
-	RD::get_singleton()->swap_buffers();
+	if (p_swap_buffers) {
+		RD::get_singleton()->swap_buffers();
+	}
 }
 
 void RendererCompositorRD::initialize() {
@@ -126,18 +127,18 @@ void RendererCompositorRD::initialize() {
 
 		//create index array for copy shader
 		Vector<uint8_t> pv;
-		pv.resize(6 * 4);
+		pv.resize(6 * 2);
 		{
 			uint8_t *w = pv.ptrw();
-			int *p32 = (int *)w;
-			p32[0] = 0;
-			p32[1] = 1;
-			p32[2] = 2;
-			p32[3] = 0;
-			p32[4] = 2;
-			p32[5] = 3;
+			uint16_t *p16 = (uint16_t *)w;
+			p16[0] = 0;
+			p16[1] = 1;
+			p16[2] = 2;
+			p16[3] = 0;
+			p16[4] = 2;
+			p16[5] = 3;
 		}
-		blit.index_buffer = RD::get_singleton()->index_buffer_create(6, RenderingDevice::INDEX_BUFFER_FORMAT_UINT32, pv);
+		blit.index_buffer = RD::get_singleton()->index_buffer_create(6, RenderingDevice::INDEX_BUFFER_FORMAT_UINT16, pv);
 		blit.array = RD::get_singleton()->index_array_create(blit.index_buffer, 0, 6);
 
 		blit.sampler = RD::get_singleton()->sampler_create(RD::SamplerState());

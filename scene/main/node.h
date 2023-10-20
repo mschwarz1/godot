@@ -217,8 +217,8 @@ private:
 
 	Ref<MultiplayerAPI> multiplayer;
 
-	void _print_tree_pretty(const String &prefix, const bool last);
-	void _print_tree(const Node *p_node);
+	String _get_tree_string_pretty(const String &p_prefix, bool p_last);
+	String _get_tree_string(const Node *p_node);
 
 	Node *_get_child_by_name(const StringName &p_name) const;
 
@@ -386,6 +386,8 @@ public:
 	String get_description() const;
 	void set_name(const String &p_name);
 
+	InternalMode get_internal_mode() const;
+
 	void add_child(Node *p_child, bool p_force_readable_name = false, InternalMode p_internal = INTERNAL_MODE_DISABLED);
 	void add_sibling(Node *p_sibling, bool p_force_readable_name = false);
 	void remove_child(Node *p_child);
@@ -409,7 +411,7 @@ public:
 	Window *get_last_exclusive_window() const;
 
 	_FORCE_INLINE_ SceneTree *get_tree() const {
-		ERR_FAIL_COND_V(!data.tree, nullptr);
+		ERR_FAIL_NULL_V(data.tree, nullptr);
 		return data.tree;
 	}
 
@@ -474,6 +476,8 @@ public:
 
 	void print_tree();
 	void print_tree_pretty();
+	String get_tree_string();
+	String get_tree_string_pretty();
 
 	void set_scene_file_path(const String &p_scene_file_path);
 	String get_scene_file_path() const;

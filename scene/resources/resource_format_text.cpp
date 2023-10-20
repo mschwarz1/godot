@@ -34,6 +34,7 @@
 #include "core/io/dir_access.h"
 #include "core/io/missing_resource.h"
 #include "core/io/resource_format_binary.h"
+#include "core/object/script_language.h"
 #include "core/version.h"
 
 // Version 2: changed names for Basis, AABB, Vectors, etc.
@@ -1388,6 +1389,8 @@ Error ResourceLoaderText::save_as_binary(const String &p_path) {
 	wf->store_buffer(data.ptr(), data.size());
 	{
 		Ref<DirAccess> dar = DirAccess::open(temp_file.get_base_dir());
+		ERR_FAIL_COND_V(dar.is_null(), FAILED);
+
 		dar->remove(temp_file);
 	}
 
