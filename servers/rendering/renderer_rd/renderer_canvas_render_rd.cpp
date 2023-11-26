@@ -1116,6 +1116,7 @@ void RendererCanvasRenderRD::_render_items(RID p_to_render_target, int p_item_co
 		fb_uniform_set = texture_storage->render_target_get_backbuffer_uniform_set(p_to_render_target);
 	} else {
 		framebuffer = texture_storage->render_target_get_rd_framebuffer(p_to_render_target);
+		texture_storage->render_target_set_msaa_needs_resolve(p_to_render_target, false); // If MSAA is enabled, our framebuffer will be resolved!
 
 		if (texture_storage->render_target_is_clear_requested(p_to_render_target)) {
 			clear = true;
@@ -2759,7 +2760,7 @@ bool RendererCanvasRenderRD::free(RID p_rid) {
 }
 
 void RendererCanvasRenderRD::set_shadow_texture_size(int p_size) {
-	p_size = nearest_power_of_2_templated(p_size);
+	p_size = MAX(1, nearest_power_of_2_templated(p_size));
 	if (p_size == state.shadow_texture_size) {
 		return;
 	}
