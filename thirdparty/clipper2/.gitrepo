@@ -1,0 +1,12 @@
+; DO NOT EDIT (unless you know what you are doing)
+;
+; This subdirectory is a git "subrepo", and this file is maintained by the
+; git-subrepo command. See https://github.com/ingydotnet/git-subrepo#readme
+;
+[subrepo]
+	remote = https://github.com/AngusJohnson/Clipper2.git
+	branch = main
+	commit = 015d5e72d5ab69e97b0f7d45bcec54c66a1ddbe0
+	parent = e09cdd55421b8f7f520556ec5086f0c65d8d0148
+	method = merge
+	cmdver = 0.4.6

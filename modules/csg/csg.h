@@ -42,6 +42,10 @@
 #include "core/templates/vector.h"
 #include "scene/resources/material.h"
 
+#include "thirdparty/glm/glm/ext/vector_int3.hpp"
+#include "thirdparty/manifold/src/manifold/include/manifold.h"
+#include "thirdparty/glm/glm/ext/vector_float3.hpp"
+
 struct CSGBrush {
 	struct Face {
 		Vector3 vertices[3];
@@ -51,154 +55,68 @@ struct CSGBrush {
 		bool invert = false;
 		int material = 0;
 	};
+	enum class ManfifoldError {
+		NoError,
+		NonFiniteVertex,
+		NotManifold,
+		VertexOutOfBounds,
+		PropertiesWrongLength,
+		MissingPositionProperties,
+		MergeVectorsDifferentLengths,
+		MergeIndexOutOfBounds,
+		TransformWrongLength,
+		RunIndexWrongLength,
+		FaceIDWrongLength,
+	};
+	manifold::MeshGL mesh = manifold::MeshGL();
+	CSGBrush() { }
+	CSGBrush(CSGBrush &p_brush, const Transform3D &p_xform) {
+		faces = p_brush.faces;
+		materials = p_brush.materials;
+		mesh_id_properties = p_brush.mesh_id_properties;
+		mesh_id_triangle_property_indices = p_brush.mesh_id_triangle_property_indices;
+		mesh_id_materials = p_brush.mesh_id_materials;
+		for (int i = 0; i < faces.size(); i++) {
+			for (int j = 0; j < 3; j++) {
+				faces.write[i].vertices[j] = p_xform.xform(p_brush.faces[i].vertices[j]);
+			}
+		}
+		create_manifold();
+		_regen_face_aabbs();
+	}
 
 	Vector<Face> faces;
 	Vector<Ref<Material>> materials;
 
-	inline void _regen_face_aabbs();
+	manifold::Manifold manifold;
+	HashMap<int64_t, std::vector<float>> mesh_id_properties;
+	HashMap<int64_t, std::vector<glm::ivec3>> mesh_id_triangle_property_indices;
+	HashMap<int64_t, Vector<Ref<Material>>> mesh_id_materials;
+
+	inline void _regen_face_aabbs() {
+		for (int i = 0; i < faces.size(); i++) {
+			faces.write[i].aabb = AABB();
+			faces.write[i].aabb.position = faces[i].vertices[0];
+			faces.write[i].aabb.expand_to(faces[i].vertices[1]);
+			faces.write[i].aabb.expand_to(faces[i].vertices[2]);
+		}
+	}
+
+	enum {
+		MANIFOLD_PROPERTY_POSITION = 0,
+		MANIFOLD_PROPERTY_MAX = 3,
+	};
+	void create_manifold();
+	void convert_manifold_to_brush();
+	static void merge_manifold_properties(const HashMap<int64_t, std::vector<float>> &p_mesh_id_properties,
+			const HashMap<int64_t, std::vector<glm::ivec3>> &p_mesh_id_triangle_property_indices,
+			const HashMap<int64_t, Vector<Ref<Material>>> &p_mesh_id_materials,
+			HashMap<int64_t, std::vector<float>> &r_mesh_id_properties,
+			HashMap<int64_t, std::vector<glm::ivec3>> &r_mesh_id_triangle_property_indices,
+			HashMap<int64_t, Vector<Ref<Material>>> &r_mesh_id_materials);
 
 	// Create a brush from faces.
 	void build_from_faces(const Vector<Vector3> &p_vertices, const Vector<Vector2> &p_uvs, const Vector<bool> &p_smooth, const Vector<Ref<Material>> &p_materials, const Vector<bool> &p_invert_faces);
-	void copy_from(const CSGBrush &p_brush, const Transform3D &p_xform);
-};
-
-struct CSGBrushOperation {
-	enum Operation {
-		OPERATION_UNION,
-		OPERATION_INTERSECTION,
-		OPERATION_SUBTRACTION,
-	};
-
-	void merge_brushes(Operation p_operation, const CSGBrush &p_brush_a, const CSGBrush &p_brush_b, CSGBrush &r_merged_brush, float p_vertex_snap);
-
-	struct MeshMerge {
-		struct Face {
-			bool from_b = false;
-			bool inside = false;
-			int points[3] = {};
-			Vector2 uvs[3];
-			bool smooth = false;
-			bool invert = false;
-			int material_idx = 0;
-		};
-
-		struct FaceBVH {
-			int face = 0;
-			int left = 0;
-			int right = 0;
-			int next = 0;
-			Vector3 center;
-			AABB aabb;
-		};
-
-		struct FaceBVHCmpX {
-			_FORCE_INLINE_ bool operator()(const FaceBVH *p_left, const FaceBVH *p_right) const {
-				return p_left->center.x < p_right->center.x;
-			}
-		};
-
-		struct FaceBVHCmpY {
-			_FORCE_INLINE_ bool operator()(const FaceBVH *p_left, const FaceBVH *p_right) const {
-				return p_left->center.y < p_right->center.y;
-			}
-		};
-		struct FaceBVHCmpZ {
-			_FORCE_INLINE_ bool operator()(const FaceBVH *p_left, const FaceBVH *p_right) const {
-				return p_left->center.z < p_right->center.z;
-			}
-		};
-
-		struct VertexKey {
-			int32_t x, y, z;
-			_FORCE_INLINE_ bool operator<(const VertexKey &p_key) const {
-				if (x == p_key.x) {
-					if (y == p_key.y) {
-						return z < p_key.z;
-					} else {
-						return y < p_key.y;
-					}
-				} else {
-					return x < p_key.x;
-				}
-			}
-
-			_FORCE_INLINE_ bool operator==(const VertexKey &p_key) const {
-				return (x == p_key.x && y == p_key.y && z == p_key.z);
-			}
-		};
-
-		struct VertexKeyHash {
-			static _FORCE_INLINE_ uint32_t hash(const VertexKey &p_vk) {
-				uint32_t h = hash_murmur3_one_32(p_vk.x);
-				h = hash_murmur3_one_32(p_vk.y, h);
-				h = hash_murmur3_one_32(p_vk.z, h);
-				return h;
-			}
-		};
-		struct Intersection {
-			bool found = false;
-			real_t conormal = FLT_MAX;
-			real_t distance_squared = FLT_MAX;
-			real_t origin_angle = FLT_MAX;
-		};
-
-		struct IntersectionDistance {
-			bool is_conormal;
-			real_t distance_squared;
-		};
-
-		Vector<Vector3> points;
-		Vector<Face> faces;
-		HashMap<Ref<Material>, int> materials;
-		HashMap<Vector3, int> vertex_map;
-		OAHashMap<VertexKey, int, VertexKeyHash> snap_cache;
-		float vertex_snap = 0.0;
-
-		inline void _add_distance(List<IntersectionDistance> &r_intersectionsA, List<IntersectionDistance> &r_intersectionsB, bool p_from_B, real_t p_distance, bool p_is_conormal) const;
-		inline bool _bvh_inside(FaceBVH *r_facebvhptr, int p_max_depth, int p_bvh_first, int p_face_idx) const;
-		inline int _create_bvh(FaceBVH *r_facebvhptr, FaceBVH **r_facebvhptrptr, int p_from, int p_size, int p_depth, int &r_max_depth, int &r_max_alloc);
-
-		void add_face(const Vector3 p_points[3], const Vector2 p_uvs[3], bool p_smooth, bool p_invert, const Ref<Material> &p_material, bool p_from_b);
-		void mark_inside_faces();
-	};
-
-	struct Build2DFaces {
-		struct Vertex2D {
-			Vector2 point;
-			Vector2 uv;
-		};
-
-		struct Face2D {
-			int vertex_idx[3] = {};
-		};
-
-		Vector<Vertex2D> vertices;
-		Vector<Face2D> faces;
-		Plane plane;
-		Transform3D to_2D;
-		Transform3D to_3D;
-		float vertex_snap2 = 0.0;
-
-		inline int _get_point_idx(const Vector2 &p_point);
-		inline int _add_vertex(const Vertex2D &p_vertex);
-		inline void _add_vertex_idx_sorted(Vector<int> &r_vertex_indices, int p_new_vertex_index);
-		inline void _merge_faces(const Vector<int> &p_segment_indices);
-		inline void _find_edge_intersections(const Vector2 p_segment_points[2], Vector<int> &r_segment_indices);
-		inline int _insert_point(const Vector2 &p_point);
-
-		void insert(const CSGBrush &p_brush, int p_brush_face);
-		void addFacesToMesh(MeshMerge &r_mesh_merge, bool p_smooth, bool p_invert, const Ref<Material> &p_material, bool p_from_b);
-
-		Build2DFaces() {}
-		Build2DFaces(const CSGBrush &p_brush, int p_brush_face, float p_vertex_snap2);
-	};
-
-	struct Build2DFaceCollection {
-		HashMap<int, Build2DFaces> build2DFacesA;
-		HashMap<int, Build2DFaces> build2DFacesB;
-	};
-
-	void update_faces(const CSGBrush &p_brush_a, const int p_face_idx_a, const CSGBrush &p_brush_b, const int p_face_idx_b, Build2DFaceCollection &p_collection, float p_vertex_snap);
 };
 
 #endif // CSG_H
