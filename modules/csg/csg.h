@@ -93,7 +93,7 @@ struct CSGBrush {
 	HashMap<int64_t, std::vector<glm::ivec3>> mesh_id_triangle_property_indices;
 	HashMap<int64_t, Vector<Ref<Material>>> mesh_id_materials;
 
-	inline void _regen_face_aabbs() {
+	void _regen_face_aabbs() {
 		for (int i = 0; i < faces.size(); i++) {
 			faces.write[i].aabb = AABB();
 			faces.write[i].aabb.position = faces[i].vertices[0];

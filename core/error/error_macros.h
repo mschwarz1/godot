@@ -192,7 +192,7 @@ void _err_flush_stdout();
 #define CRASH_BAD_INDEX(m_index, m_size)                                                                                         \
 	if (unlikely((m_index) < 0 || (m_index) >= (m_size))) {                                                                      \
 		_err_print_index_error(FUNCTION_STR, __FILE__, __LINE__, m_index, m_size, _STR(m_index), _STR(m_size), "", false, true); \
-		_err_flush_stdout();                                                                                                     \
+		_err_flush_stdout();																									 \
 		GENERATE_TRAP();                                                                                                         \
 	} else                                                                                                                       \
 		((void)0)

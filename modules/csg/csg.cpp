@@ -141,22 +141,27 @@ void CSGBrush::convert_manifold_to_brush() {
 	}
 
 	for (int i = 0; i < mesh.NumTri(); ++i) {
-		SWAP(indices.write[i * VERTICES_IN_TRIANGLE], indices.write[i * VERTICES_IN_TRIANGLE + 1]);
+		int tmp = indices[i * VERTICES_IN_TRIANGLE];
+		indices.write[i * VERTICES_IN_TRIANGLE] = indices[i * VERTICES_IN_TRIANGLE + 1];
+		indices.write[i * VERTICES_IN_TRIANGLE + 1] = tmp;		
 	}
 
 	faces.clear();
+	
 	for (int triangle_i = 0; triangle_i < mesh.NumTri(); triangle_i++) {
 		CSGBrush::Face face;
 		for (int32_t face_index_i = 0; face_index_i < VERTICES_IN_TRIANGLE; face_index_i++) {
-			int32_t clockwise_vertex_i = indices[triangle_i * mesh.NumTri() + face_index_i];
+			int32_t clockwise_vertex_i = indices[triangle_i * VERTICES_IN_TRIANGLE + face_index_i];
 			Vector3 pos;
 			pos.x = mesh.vertProperties[clockwise_vertex_i * mesh.numProp + MANIFOLD_PROPERTY_POSITION + 0];
 			pos.y = mesh.vertProperties[clockwise_vertex_i * mesh.numProp + MANIFOLD_PROPERTY_POSITION + 1];
 			pos.z = mesh.vertProperties[clockwise_vertex_i * mesh.numProp + MANIFOLD_PROPERTY_POSITION + 2];
-			face.vertices[clockwise_vertex_i] = pos;
+			face.vertices[face_index_i] = pos;
 		}
+
 		faces.push_back(face);
 	}
+	
 	_regen_face_aabbs();
 }
 
@@ -165,64 +170,93 @@ void CSGBrush::create_manifold() {
 		manifold = manifold::Manifold();
 		return;
 	}
-	// Ref<SurfaceTool> st;
-	// st.instantiate();
-	// st->begin(Mesh::PRIMITIVE_TRIANGLES);
-	// for (const CSGBrush::Face &face : faces) {
-	// 	for (int32_t vertex_i = 2; vertex_i >= 0; vertex_i--) {
-	// 		st->set_smooth_group(face.smooth);
-	// 		int32_t mat_id = face.material;
-	// 		if (mat_id == -1 || mat_id >= materials.size()) {
-	// 			st->set_material(Ref<Material>());
-	// 		} else {
-	// 			st->set_material(materials[mat_id]);
-	// 		}
-	// 		st->add_vertex(face.vertices[vertex_i]);
-	// 	}
-	// }
-	// st->index();
-	// Ref<MeshDataTool> mdt;
-	// mdt.instantiate();
-	// mdt->create_from_surface(st->commit(), 0);
-	// mesh = manifold::MeshGL();
-	// mesh.numProp = MANIFOLD_PROPERTY_MAX;
-	// const int32_t VERTICES_IN_TRIANGLE = 3;
-	// int32_t number_of_triangles = mdt->get_face_count();
-	// Vector<int32_t> indices;
-	// indices.resize(number_of_triangles * VERTICES_IN_TRIANGLE);
-	// indices.fill(-1);
+	Vector3 test = Vector3(-.5,-.5,-.5);
 
-	// for (int i = 0; i < number_of_triangles; ++i) {
-	// 	for (int j = 0; j < VERTICES_IN_TRIANGLE; ++j) {
-	// 		indices.write[i * VERTICES_IN_TRIANGLE + j] = mdt->get_face_vertex(i, j);
-	// 	}
-	// }
+    Ref<SurfaceTool> st;
+    st.instantiate();
+    st->begin(Mesh::PRIMITIVE_TRIANGLES);
+    for (const CSGBrush::Face &face : faces) {
+    	for (int32_t vertex_i = 2; vertex_i >= 0; vertex_i--) {
+    		st->set_smooth_group(face.smooth);
+    		int32_t mat_id = face.material;
+    		if (mat_id == -1 || mat_id >= materials.size()) {
+    			st->set_material(Ref<Material>());
+    		} else {
+    			st->set_material(materials[mat_id]);
+    		}
+    		st->add_vertex(face.vertices[vertex_i]);
+			if (face.vertices[vertex_i] == test)
+			{
+				printf("Yo");
+			}
+    	}
+    }
+    st->index();
+    Ref<MeshDataTool> mdt;
+    mdt.instantiate();
+    mdt->create_from_surface(st->commit(), 0);
+    mesh = manifold::MeshGL();
+    mesh.numProp = MANIFOLD_PROPERTY_MAX;
+    const int32_t VERTICES_IN_TRIANGLE = 3;
+    int32_t number_of_triangles = mdt->get_face_count();
+    Vector<int32_t> indices;
+    indices.resize(number_of_triangles * VERTICES_IN_TRIANGLE);
+    indices.fill(-1);
+    
+    for (int i = 0; i < number_of_triangles; i++) {
+    	for (int j = 0; j < VERTICES_IN_TRIANGLE; j++) {
+    		indices.write[i * VERTICES_IN_TRIANGLE + j] = mdt->get_face_vertex(i, j);
+    	}
+    }
+    /*
+    for (int i = 0; i < number_of_triangles; i++) {
+    	SWAP(indices.write[i * VERTICES_IN_TRIANGLE], indices.write[i * VERTICES_IN_TRIANGLE + 1]);
+    }
+	*/
+	
+	
+    mesh.triVerts.resize(indices.size());
+    
+    for (int i = 0; i < indices.size(); i++) {
+    	mesh.triVerts[i] = indices[i];
+    }
+    
+	// myabe here?
+    mesh.vertProperties.resize(number_of_triangles * VERTICES_IN_TRIANGLE * mesh.numProp);
+	int index = 0;
+    for (int triangle_i = 0; triangle_i < number_of_triangles; triangle_i++) {
+    	for (int32_t face_index_i = 0; face_index_i < VERTICES_IN_TRIANGLE; face_index_i++) {
+    		/*
+			int32_t counter_clockwise_vertex = indices[triangle_i * VERTICES_IN_TRIANGLE + face_index_i];
+    		Vector3 pos = mdt->get_vertex(counter_clockwise_vertex);
+    		mesh.vertProperties[triangle_i * VERTICES_IN_TRIANGLE * mesh.numProp + face_index_i * mesh.numProp + MANIFOLD_PROPERTY_POSITION] = pos.x;
+    		mesh.vertProperties[triangle_i * VERTICES_IN_TRIANGLE * mesh.numProp + face_index_i * mesh.numProp + MANIFOLD_PROPERTY_POSITION + 1] = pos.y;
+    		mesh.vertProperties[triangle_i * VERTICES_IN_TRIANGLE * mesh.numProp + face_index_i * mesh.numProp + MANIFOLD_PROPERTY_POSITION + 2] = pos.z;
+			*/
+    		//Vector3 pos = mdt->get_vertex(index); // wrong but looks right for cubes?
+			int vertIndex = indices[index];
+			Vector3 pos = mdt->get_vertex(vertIndex);
 
-	// for (int i = 0; i < number_of_triangles; ++i) {
-	// 	SWAP(indices.write[i * VERTICES_IN_TRIANGLE], indices.write[i * VERTICES_IN_TRIANGLE + 1]);
-	// }
-	// mesh.triVerts.resize(number_of_triangles * MANIFOLD_PROPERTY_MAX);
+    		mesh.vertProperties[vertIndex*3] = pos.x;
+    		mesh.vertProperties[vertIndex*3+1] = pos.y;
+    		mesh.vertProperties[vertIndex*3+2] = pos.z;
+			index++;
+			if (pos == test)
+			{
+				printf("Yo");
+			}
+    	}
+    }
 
-	// for (int i = 0; i < indices.size(); ++i) {
-	// 	mesh.triVerts[i] = indices[i];
-	// }
+	manifold = manifold::Manifold(mesh);
 
-	// mesh.vertProperties.resize(number_of_triangles * VERTICES_IN_TRIANGLE * mesh.numProp);
-	// for (int triangle_i = 0; triangle_i < number_of_triangles; triangle_i++) {
-	// 	for (int32_t face_index_i = 0; face_index_i < VERTICES_IN_TRIANGLE; face_index_i++) {
-	// 		int32_t counter_clockwise_vertex = indices[triangle_i * VERTICES_IN_TRIANGLE + face_index_i];
-	// 		Vector3 pos = mdt->get_vertex(counter_clockwise_vertex);
-	// 		mesh.vertProperties[triangle_i * VERTICES_IN_TRIANGLE * mesh.numProp + face_index_i * mesh.numProp + MANIFOLD_PROPERTY_POSITION] = pos.x;
-	// 		mesh.vertProperties[triangle_i * VERTICES_IN_TRIANGLE * mesh.numProp + face_index_i * mesh.numProp + MANIFOLD_PROPERTY_POSITION + 1] = pos.y;
-	// 		mesh.vertProperties[triangle_i * VERTICES_IN_TRIANGLE * mesh.numProp + face_index_i * mesh.numProp + MANIFOLD_PROPERTY_POSITION + 2] = pos.z;
-	// 	}
-	// }
-
-	manifold = manifold::Manifold::Cube();
+	
+	//manifold = manifold::Manifold::Cube();
 	manifold::Manifold::Error error = manifold.Status();
 	if (error != manifold::Manifold::Error::NoError) {
 		print_line(vformat("Cannot copy the other brush. %d", int(error)));
 	}
+	
 }
 
 void CSGBrush::merge_manifold_properties(const HashMap<int64_t, std::vector<float>> &p_mesh_id_properties,
