@@ -7,3 +7,6 @@
 [submodule "modules/GDPlanetaryTerrain"]
 	path = modules/GDPlanetaryTerrain
 	url = https://github.com/mschwarz1/GDPlanetaryTerrain.git
+[submodule "ActiveProjects/MinstralPlayground"]
+	path = ActiveProjects/MinstralPlayground
+	url = https://github.com/mschwarz1/MinstralPlayground.git
