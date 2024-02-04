@@ -183,6 +183,7 @@ opts.Add(BoolVariable("separate_debug_symbols", "Extract debugging symbols to a 
 opts.Add(EnumVariable("lto", "Link-time optimization (production builds)", "none", ("none", "auto", "thin", "full")))
 opts.Add(BoolVariable("production", "Set defaults to build Godot for use in production", False))
 opts.Add(BoolVariable("generate_apk", "Generate an APK/AAB after building Android library by calling Gradle", False))
+opts.Add(BoolVariable("threads", "Enable threading support", True))
 
 # Components
 opts.Add(BoolVariable("deprecated", "Enable compatibility code for deprecated and removed features", True))
@@ -832,6 +833,10 @@ if selected_platform in platform_list:
         suffix += ".double"
 
     suffix += "." + env["arch"]
+
+    if not env["threads"]:
+        suffix += ".nothreads"
+
     suffix += env.extra_suffix
 
     sys.path.remove(tmppath)
@@ -972,6 +977,9 @@ if selected_platform in platform_list:
         env.Tool("compilation_db")
         env.Alias("compiledb", env.CompilationDatabase())
 
+    if env["threads"]:
+        env.Append(CPPDEFINES=["THREADS_ENABLED"])
+
     Export("env")
 
     # Build subdirs, the build order is dependent on link order.
@@ -992,9 +1000,6 @@ if selected_platform in platform_list:
 
     # Microsoft Visual Studio Project Generation
     if env["vsproj"]:
-        if os.name != "nt":
-            print("Error: The `vsproj` option is only usable on Windows with Visual Studio.")
-            Exit(255)
         env["CPPPATH"] = [Dir(path) for path in env["CPPPATH"]]
         methods.generate_vs_project(env, ARGUMENTS, env["vsproj_name"])
         methods.generate_cpp_hint_file("cpp.hint")

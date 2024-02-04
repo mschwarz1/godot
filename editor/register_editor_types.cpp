@@ -50,6 +50,8 @@
 #include "editor/filesystem_dock.h"
 #include "editor/gui/editor_file_dialog.h"
 #include "editor/gui/editor_spin_slider.h"
+#include "editor/import/3d/resource_importer_obj.h"
+#include "editor/import/3d/resource_importer_scene.h"
 #include "editor/import/editor_import_plugin.h"
 #include "editor/import/resource_importer_bitmask.h"
 #include "editor/import/resource_importer_bmfont.h"
@@ -58,8 +60,6 @@
 #include "editor/import/resource_importer_image.h"
 #include "editor/import/resource_importer_imagefont.h"
 #include "editor/import/resource_importer_layered_texture.h"
-#include "editor/import/resource_importer_obj.h"
-#include "editor/import/resource_importer_scene.h"
 #include "editor/import/resource_importer_shader_file.h"
 #include "editor/import/resource_importer_texture.h"
 #include "editor/import/resource_importer_texture_atlas.h"
@@ -281,6 +281,10 @@ void register_editor_types() {
 	Engine::Singleton ei_singleton = Engine::Singleton("EditorInterface", EditorInterface::get_singleton());
 	ei_singleton.editor_only = true;
 	Engine::get_singleton()->add_singleton(ei_singleton);
+
+	// Required as GDExtensions can register docs at init time way before this
+	// class is actually instantiated.
+	EditorHelp::init_gdext_pointers();
 
 	OS::get_singleton()->benchmark_end_measure("Editor", "Register Types");
 }

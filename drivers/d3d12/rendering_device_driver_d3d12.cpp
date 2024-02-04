@@ -78,12 +78,21 @@ extern "C" {
 #undef UNUSED
 #endif
 
+#ifdef PIX_ENABLED
+#if defined(__GNUC__)
+#define _MSC_VER 1800
+#endif
+#define USE_PIX
+#include "WinPixEventRuntime/pix3.h"
+#if defined(__GNUC__)
+#undef _MSC_VER
+#endif
+#endif
+
 static const D3D12_RANGE VOID_RANGE = {};
 
-static const uint32_t ROOT_CONSTANT_SPACE = RDD::MAX_UNIFORM_SETS + 1;
-static const uint32_t ROOT_CONSTANT_REGISTER = 0;
-static const uint32_t RUNTIME_DATA_SPACE = RDD::MAX_UNIFORM_SETS + 2;
-static const uint32_t RUNTIME_DATA_REGISTER = 0;
+static const uint32_t ROOT_CONSTANT_REGISTER = GODOT_NIR_DESCRIPTOR_SET_MULTIPLIER * (RDD::MAX_UNIFORM_SETS + 1);
+static const uint32_t RUNTIME_DATA_REGISTER = GODOT_NIR_DESCRIPTOR_SET_MULTIPLIER * (RDD::MAX_UNIFORM_SETS + 2);
 
 #ifdef DEV_ENABLED
 //#define DEBUG_COUNT_BARRIERS
@@ -1817,7 +1826,9 @@ bool RenderingDeviceDriverD3D12::command_buffer_begin(CommandBufferID p_cmd_buff
 #ifdef DEBUG_ENABLED
 	ERR_FAIL_COND_V(cmd_buf_info->cmd_list->GetType() != D3D12_COMMAND_LIST_TYPE_DIRECT, false);
 #endif
-	HRESULT res = cmd_buf_info->cmd_list->Reset(cmd_buf_info->cmd_allocator.Get(), nullptr);
+	HRESULT res = cmd_buf_info->cmd_allocator->Reset();
+	ERR_FAIL_COND_V_MSG(!SUCCEEDED(res), false, "Reset failed with error " + vformat("0x%08ux", (uint64_t)res) + ".");
+	res = cmd_buf_info->cmd_list->Reset(cmd_buf_info->cmd_allocator.Get(), nullptr);
 	ERR_FAIL_COND_V_MSG(!SUCCEEDED(res), false, "Reset failed with error " + vformat("0x%08ux", (uint64_t)res) + ".");
 	return true;
 }
@@ -1827,7 +1838,9 @@ bool RenderingDeviceDriverD3D12::command_buffer_begin_secondary(CommandBufferID 
 #ifdef DEBUG_ENABLED
 	ERR_FAIL_COND_V(cmd_buf_info->cmd_list->GetType() != D3D12_COMMAND_LIST_TYPE_BUNDLE, false);
 #endif
-	HRESULT res = cmd_buf_info->cmd_list->Reset(cmd_buf_info->cmd_allocator.Get(), nullptr);
+	HRESULT res = cmd_buf_info->cmd_allocator->Reset();
+	ERR_FAIL_COND_V_MSG(!SUCCEEDED(res), false, "Reset failed with error " + vformat("0x%08ux", (uint64_t)res) + ".");
+	res = cmd_buf_info->cmd_list->Reset(cmd_buf_info->cmd_allocator.Get(), nullptr);
 	ERR_FAIL_COND_V_MSG(!SUCCEEDED(res), false, "Reset failed with error " + vformat("0x%08ux", (uint64_t)res) + ".");
 	return true;
 }
@@ -2293,9 +2306,7 @@ Vector<uint8_t> RenderingDeviceDriverD3D12::shader_compile_binary_from_spirv(Vec
 		nir_options.lower_base_vertex = false;
 
 		dxil_spirv_runtime_conf dxil_runtime_conf = {};
-		dxil_runtime_conf.runtime_data_cbv.register_space = RUNTIME_DATA_SPACE;
 		dxil_runtime_conf.runtime_data_cbv.base_shader_register = RUNTIME_DATA_REGISTER;
-		dxil_runtime_conf.push_constant_cbv.register_space = ROOT_CONSTANT_SPACE;
 		dxil_runtime_conf.push_constant_cbv.base_shader_register = ROOT_CONSTANT_REGISTER;
 		dxil_runtime_conf.zero_based_vertex_instance_id = true;
 		dxil_runtime_conf.zero_based_compute_workgroup_id = true;
@@ -2413,10 +2424,10 @@ Vector<uint8_t> RenderingDeviceDriverD3D12::shader_compile_binary_from_spirv(Vec
 				DEV_ASSERT(p_dxil_type < ARRAY_SIZE(DXIL_TYPE_TO_CLASS));
 				ResourceClass res_class = DXIL_TYPE_TO_CLASS[p_dxil_type];
 
-				if (p_register == ROOT_CONSTANT_REGISTER && p_space == ROOT_CONSTANT_SPACE) {
+				if (p_register == ROOT_CONSTANT_REGISTER && p_space == 0) {
 					DEV_ASSERT(res_class == RES_CLASS_CBV);
 					shader_data_in.binary_data.dxil_push_constant_stages |= (1 << shader_data_in.stage);
-				} else if (p_register == RUNTIME_DATA_REGISTER && p_space == RUNTIME_DATA_SPACE) {
+				} else if (p_register == RUNTIME_DATA_REGISTER && p_space == 0) {
 					DEV_ASSERT(res_class == RES_CLASS_CBV);
 					shader_data_in.binary_data.nir_runtime_data_root_param_idx = 1; // Temporary, to be determined later.
 				} else {
@@ -2575,7 +2586,7 @@ Vector<uint8_t> RenderingDeviceDriverD3D12::shader_compile_binary_from_spirv(Vec
 			push_constant.InitAsConstants(
 					binary_data.push_constant_size / sizeof(uint32_t),
 					ROOT_CONSTANT_REGISTER,
-					ROOT_CONSTANT_SPACE,
+					0,
 					stages_to_d3d12_visibility(binary_data.dxil_push_constant_stages));
 			root_params.push_back(push_constant);
 		}
@@ -2588,7 +2599,7 @@ Vector<uint8_t> RenderingDeviceDriverD3D12::shader_compile_binary_from_spirv(Vec
 			nir_runtime_data.InitAsConstants(
 					sizeof(dxil_spirv_vertex_runtime_data) / sizeof(uint32_t),
 					RUNTIME_DATA_REGISTER,
-					RUNTIME_DATA_SPACE,
+					0,
 					D3D12_SHADER_VISIBILITY_VERTEX);
 			root_params.push_back(nir_runtime_data);
 		}
@@ -5159,7 +5170,21 @@ void RenderingDeviceDriverD3D12::command_timestamp_write(CommandBufferID p_cmd_b
 	TimestampQueryPoolInfo *tqp_info = (TimestampQueryPoolInfo *)p_pool_id.id;
 	ID3D12Resource *results_buffer = tqp_info->results_buffer_allocation->GetResource();
 	cmd_buf_info->cmd_list->EndQuery(tqp_info->query_heap.Get(), D3D12_QUERY_TYPE_TIMESTAMP, p_index);
-	cmd_buf_info->cmd_list->ResolveQueryData(tqp_info->query_heap.Get(), D3D12_QUERY_TYPE_TIMESTAMP, p_index, tqp_info->query_count, results_buffer, p_index * sizeof(uint64_t));
+	cmd_buf_info->cmd_list->ResolveQueryData(tqp_info->query_heap.Get(), D3D12_QUERY_TYPE_TIMESTAMP, p_index, 1, results_buffer, p_index * sizeof(uint64_t));
+}
+
+void RenderingDeviceDriverD3D12::command_begin_label(CommandBufferID p_cmd_buffer, const char *p_label_name, const Color &p_color) {
+#ifdef PIX_ENABLED
+	const CommandBufferInfo *cmd_buf_info = (const CommandBufferInfo *)p_cmd_buffer.id;
+	PIXBeginEvent(cmd_buf_info->cmd_list.Get(), p_color.to_argb32(), p_label_name);
+#endif
+}
+
+void RenderingDeviceDriverD3D12::command_end_label(CommandBufferID p_cmd_buffer) {
+#ifdef PIX_ENABLED
+	const CommandBufferInfo *cmd_buf_info = (const CommandBufferInfo *)p_cmd_buffer.id;
+	PIXEndEvent(cmd_buf_info->cmd_list.Get());
+#endif
 }
 
 /****************/

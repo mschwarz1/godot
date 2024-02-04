@@ -1381,51 +1381,43 @@ String GDScript::debug_get_script_name(const Ref<Script> &p_script) {
 }
 #endif
 
-GDScript::UpdatableFuncPtr GDScript::func_ptrs_to_update_main_thread;
-thread_local GDScript::UpdatableFuncPtr *GDScript::func_ptrs_to_update_thread_local = nullptr;
-
-GDScript::UpdatableFuncPtrElement GDScript::_add_func_ptr_to_update(GDScriptFunction **p_func_ptr_ptr) {
-	UpdatableFuncPtrElement result = {};
-
-	{
-		MutexLock lock(func_ptrs_to_update_thread_local->mutex);
-		result.element = func_ptrs_to_update_thread_local->ptrs.push_back(p_func_ptr_ptr);
-		result.func_ptr = func_ptrs_to_update_thread_local;
-
-		if (likely(func_ptrs_to_update_thread_local->initialized)) {
-			return result;
-		}
-
-		func_ptrs_to_update_thread_local->initialized = true;
+GDScript::UpdatableFuncPtr::UpdatableFuncPtr(GDScriptFunction *p_function) {
+	if (p_function == nullptr) {
+		return;
 	}
 
+	ptr = p_function;
+	script = ptr->get_script();
+	ERR_FAIL_NULL(script);
+
+	MutexLock script_lock(script->func_ptrs_to_update_mutex);
+	list_element = script->func_ptrs_to_update.push_back(this);
+}
+
+GDScript::UpdatableFuncPtr::~UpdatableFuncPtr() {
+	ERR_FAIL_NULL(script);
+
+	if (list_element) {
+		MutexLock script_lock(script->func_ptrs_to_update_mutex);
+		list_element->erase();
+		list_element = nullptr;
+	}
+}
+
+void GDScript::_recurse_replace_function_ptrs(const HashMap<GDScriptFunction *, GDScriptFunction *> &p_replacements) const {
 	MutexLock lock(func_ptrs_to_update_mutex);
-	func_ptrs_to_update.push_back(func_ptrs_to_update_thread_local);
-	func_ptrs_to_update_thread_local->rc++;
+	for (UpdatableFuncPtr *updatable : func_ptrs_to_update) {
+		HashMap<GDScriptFunction *, GDScriptFunction *>::ConstIterator replacement = p_replacements.find(updatable->ptr);
+		if (replacement) {
+			updatable->ptr = replacement->value;
+		} else {
+			// Probably a lambda from another reload, ignore.
+			updatable->ptr = nullptr;
+		}
+	}
 
-	return result;
-}
-
-void GDScript::_remove_func_ptr_to_update(const UpdatableFuncPtrElement &p_func_ptr_element) {
-	ERR_FAIL_NULL(p_func_ptr_element.element);
-	ERR_FAIL_NULL(p_func_ptr_element.func_ptr);
-	MutexLock lock(p_func_ptr_element.func_ptr->mutex);
-	p_func_ptr_element.element->erase();
-}
-
-void GDScript::_fixup_thread_function_bookkeeping() {
-	// Transfer the ownership of these update items to the main thread,
-	// because the current one is dying, leaving theirs orphan, dangling.
-
-	DEV_ASSERT(!Thread::is_main_thread());
-
-	MutexLock lock(func_ptrs_to_update_main_thread.mutex);
-	MutexLock lock2(func_ptrs_to_update_thread_local->mutex);
-
-	while (!func_ptrs_to_update_thread_local->ptrs.is_empty()) {
-		List<GDScriptFunction **>::Element *E = func_ptrs_to_update_thread_local->ptrs.front();
-		E->transfer_to_back(&func_ptrs_to_update_main_thread.ptrs);
-		func_ptrs_to_update_thread_local->transferred = true;
+	for (HashMap<StringName, Ref<GDScript>>::ConstIterator subscript = subclasses.begin(); subscript; ++subscript) {
+		subscript->value->_recurse_replace_function_ptrs(p_replacements);
 	}
 }
 
@@ -1447,30 +1439,9 @@ void GDScript::clear(ClearData *p_clear_data) {
 	}
 
 	{
-		MutexLock outer_lock(func_ptrs_to_update_mutex);
+		MutexLock lock(func_ptrs_to_update_mutex);
 		for (UpdatableFuncPtr *updatable : func_ptrs_to_update) {
-			bool destroy = false;
-			{
-				MutexLock inner_lock(updatable->mutex);
-				if (updatable->transferred) {
-					func_ptrs_to_update_main_thread.mutex.lock();
-				}
-				for (GDScriptFunction **func_ptr_ptr : updatable->ptrs) {
-					*func_ptr_ptr = nullptr;
-				}
-				DEV_ASSERT(updatable->rc != 0);
-				updatable->rc--;
-				if (updatable->rc == 0) {
-					destroy = true;
-				}
-				if (updatable->transferred) {
-					func_ptrs_to_update_main_thread.mutex.unlock();
-				}
-			}
-			if (destroy) {
-				DEV_ASSERT(updatable != &func_ptrs_to_update_main_thread);
-				memdelete(updatable);
-			}
+			updatable->ptr = nullptr;
 		}
 	}
 
@@ -1542,6 +1513,13 @@ GDScript::~GDScript() {
 		return;
 	}
 	destructing = true;
+
+	if (is_print_verbose_enabled()) {
+		MutexLock lock(func_ptrs_to_update_mutex);
+		if (!func_ptrs_to_update.is_empty()) {
+			print_line(vformat("GDScript: %d orphaned lambdas becoming invalid at destruction of script '%s'.", func_ptrs_to_update.size(), fully_qualified_name));
+		}
+	}
 
 	clear();
 
@@ -1687,7 +1665,7 @@ bool GDScriptInstance::get(const StringName &p_name, Variant &r_ret) const {
 		{
 			HashMap<StringName, MethodInfo>::ConstIterator E = sptr->_signals.find(p_name);
 			if (E) {
-				r_ret = Signal(this->owner, E->key);
+				r_ret = Signal(owner, E->key);
 				return true;
 			}
 		}
@@ -1696,9 +1674,9 @@ bool GDScriptInstance::get(const StringName &p_name, Variant &r_ret) const {
 			HashMap<StringName, GDScriptFunction *>::ConstIterator E = sptr->member_functions.find(p_name);
 			if (E) {
 				if (sptr->rpc_config.has(p_name)) {
-					r_ret = Callable(memnew(GDScriptRPCCallable(this->owner, E->key)));
+					r_ret = Callable(memnew(GDScriptRPCCallable(owner, E->key)));
 				} else {
-					r_ret = Callable(this->owner, E->key);
+					r_ret = Callable(owner, E->key);
 				}
 				return true;
 			}
@@ -2091,33 +2069,6 @@ void GDScriptLanguage::remove_named_global_constant(const StringName &p_name) {
 	named_globals.erase(p_name);
 }
 
-void GDScriptLanguage::thread_enter() {
-	GDScript::func_ptrs_to_update_thread_local = memnew(GDScript::UpdatableFuncPtr);
-}
-
-void GDScriptLanguage::thread_exit() {
-	// This thread may have been created before GDScript was up
-	// (which also means it can't have run any GDScript code at all).
-	if (!GDScript::func_ptrs_to_update_thread_local) {
-		return;
-	}
-
-	GDScript::_fixup_thread_function_bookkeeping();
-
-	bool destroy = false;
-	{
-		MutexLock lock(GDScript::func_ptrs_to_update_thread_local->mutex);
-		DEV_ASSERT(GDScript::func_ptrs_to_update_thread_local->rc != 0);
-		GDScript::func_ptrs_to_update_thread_local->rc--;
-		if (GDScript::func_ptrs_to_update_thread_local->rc == 0) {
-			destroy = true;
-		}
-	}
-	if (destroy) {
-		memdelete(GDScript::func_ptrs_to_update_thread_local);
-	}
-}
-
 void GDScriptLanguage::init() {
 	//populate global constants
 	int gcc = CoreConstants::get_global_constant_count();
@@ -2149,8 +2100,6 @@ void GDScriptLanguage::init() {
 	for (const Engine::Singleton &E : singletons) {
 		_add_global(E.name, E.ptr);
 	}
-
-	GDScript::func_ptrs_to_update_thread_local = &GDScript::func_ptrs_to_update_main_thread;
 
 #ifdef TESTS_ENABLED
 	GDScriptTests::GDScriptTestRunner::handle_cmdline();
@@ -2201,13 +2150,11 @@ void GDScriptLanguage::finish() {
 	}
 	script_list.clear();
 	function_list.clear();
-
-	DEV_ASSERT(GDScript::func_ptrs_to_update_main_thread.rc == 1);
 }
 
 void GDScriptLanguage::profiling_start() {
 #ifdef DEBUG_ENABLED
-	MutexLock lock(this->mutex);
+	MutexLock lock(mutex);
 
 	SelfList<GDScriptFunction> *elem = function_list.first();
 	while (elem) {
@@ -2238,7 +2185,7 @@ void GDScriptLanguage::profiling_set_save_native_calls(bool p_enable) {
 
 void GDScriptLanguage::profiling_stop() {
 #ifdef DEBUG_ENABLED
-	MutexLock lock(this->mutex);
+	MutexLock lock(mutex);
 
 	profiling = false;
 #endif
@@ -2248,7 +2195,7 @@ int GDScriptLanguage::profiling_get_accumulated_data(ProfilingInfo *p_info_arr, 
 	int current = 0;
 #ifdef DEBUG_ENABLED
 
-	MutexLock lock(this->mutex);
+	MutexLock lock(mutex);
 
 	profiling_collate_native_call_data(true);
 	SelfList<GDScriptFunction> *elem = function_list.first();
@@ -2286,7 +2233,7 @@ int GDScriptLanguage::profiling_get_frame_data(ProfilingInfo *p_info_arr, int p_
 	int current = 0;
 
 #ifdef DEBUG_ENABLED
-	MutexLock lock(this->mutex);
+	MutexLock lock(mutex);
 
 	profiling_collate_native_call_data(false);
 	SelfList<GDScriptFunction> *elem = function_list.first();
@@ -2373,14 +2320,13 @@ struct GDScriptDepSort {
 void GDScriptLanguage::reload_all_scripts() {
 #ifdef DEBUG_ENABLED
 	print_verbose("GDScript: Reloading all scripts");
-	List<Ref<GDScript>> scripts;
+	Array scripts;
 	{
-		MutexLock lock(this->mutex);
+		MutexLock lock(mutex);
 
 		SelfList<GDScript> *elem = script_list.first();
 		while (elem) {
-			// Scripts will reload all subclasses, so only reload root scripts.
-			if (elem->self()->is_root_script() && elem->self()->get_path().is_resource_file()) {
+			if (elem->self()->get_path().is_resource_file()) {
 				print_verbose("GDScript: Found: " + elem->self()->get_path());
 				scripts.push_back(Ref<GDScript>(elem->self())); //cast to gdscript to avoid being erased by accident
 			}
@@ -2401,24 +2347,16 @@ void GDScriptLanguage::reload_all_scripts() {
 #endif
 	}
 
-	//as scripts are going to be reloaded, must proceed without locking here
-
-	scripts.sort_custom<GDScriptDepSort>(); //update in inheritance dependency order
-
-	for (Ref<GDScript> &scr : scripts) {
-		print_verbose("GDScript: Reloading: " + scr->get_path());
-		scr->load_source_code(scr->get_path());
-		scr->reload(true);
-	}
+	reload_scripts(scripts, true);
 #endif
 }
 
-void GDScriptLanguage::reload_tool_script(const Ref<Script> &p_script, bool p_soft_reload) {
+void GDScriptLanguage::reload_scripts(const Array &p_scripts, bool p_soft_reload) {
 #ifdef DEBUG_ENABLED
 
 	List<Ref<GDScript>> scripts;
 	{
-		MutexLock lock(this->mutex);
+		MutexLock lock(mutex);
 
 		SelfList<GDScript> *elem = script_list.first();
 		while (elem) {
@@ -2439,7 +2377,7 @@ void GDScriptLanguage::reload_tool_script(const Ref<Script> &p_script, bool p_so
 	scripts.sort_custom<GDScriptDepSort>(); //update in inheritance dependency order
 
 	for (Ref<GDScript> &scr : scripts) {
-		bool reload = scr == p_script || to_reload.has(scr->get_base());
+		bool reload = p_scripts.has(scr) || to_reload.has(scr->get_base());
 
 		if (!reload) {
 			continue;
@@ -2462,7 +2400,7 @@ void GDScriptLanguage::reload_tool_script(const Ref<Script> &p_script, bool p_so
 				}
 			}
 
-//same thing for placeholders
+			//same thing for placeholders
 #ifdef TOOLS_ENABLED
 
 			while (scr->placeholders.size()) {
@@ -2490,6 +2428,8 @@ void GDScriptLanguage::reload_tool_script(const Ref<Script> &p_script, bool p_so
 
 	for (KeyValue<Ref<GDScript>, HashMap<ObjectID, List<Pair<StringName, Variant>>>> &E : to_reload) {
 		Ref<GDScript> scr = E.key;
+		print_verbose("GDScript: Reloading: " + scr->get_path());
+		scr->load_source_code(scr->get_path());
 		scr->reload(p_soft_reload);
 
 		//restore state if saved
@@ -2537,12 +2477,18 @@ void GDScriptLanguage::reload_tool_script(const Ref<Script> &p_script, bool p_so
 #endif
 }
 
+void GDScriptLanguage::reload_tool_script(const Ref<Script> &p_script, bool p_soft_reload) {
+	Array scripts;
+	scripts.push_back(p_script);
+	reload_scripts(scripts, p_soft_reload);
+}
+
 void GDScriptLanguage::frame() {
 	calls = 0;
 
 #ifdef DEBUG_ENABLED
 	if (profiling) {
-		MutexLock lock(this->mutex);
+		MutexLock lock(mutex);
 
 		SelfList<GDScriptFunction> *elem = function_list.first();
 		while (elem) {

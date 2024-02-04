@@ -173,6 +173,7 @@ class InputEventKey : public InputEventWithModifiers {
 	Key physical_keycode = Key::NONE;
 	Key key_label = Key::NONE;
 	uint32_t unicode = 0; ///unicode
+	KeyLocation location = KeyLocation::UNSPECIFIED;
 
 	bool echo = false; /// true if this is an echo key
 
@@ -194,6 +195,9 @@ public:
 	void set_unicode(char32_t p_unicode);
 	char32_t get_unicode() const;
 
+	void set_location(KeyLocation p_key_location);
+	KeyLocation get_location() const;
+
 	void set_echo(bool p_enable);
 	virtual bool is_echo() const override;
 
@@ -209,6 +213,7 @@ public:
 	virtual String as_text_physical_keycode() const;
 	virtual String as_text_keycode() const;
 	virtual String as_text_key_label() const;
+	virtual String as_text_location() const;
 	virtual String as_text() const override;
 	virtual String to_string() override;
 
