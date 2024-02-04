@@ -165,7 +165,7 @@ TEST_SUITE("[Navigation]") {
 			CHECK_EQ(navigation_server->map_get_cell_size(map), doctest::Approx(0.55));
 			CHECK_EQ(navigation_server->map_get_edge_connection_margin(map), doctest::Approx(0.66));
 			CHECK_EQ(navigation_server->map_get_link_connection_radius(map), doctest::Approx(0.77));
-			CHECK_EQ(navigation_server->map_get_up(map), Vector3(1, 0, 0));
+			CHECK_EQ(navigation_server->map_get_up(map, Vector3()), Vector3(1, 0, 0));
 			CHECK_EQ(navigation_server->map_get_use_edge_connections(map), !initial_use_edge_connections);
 		}
 

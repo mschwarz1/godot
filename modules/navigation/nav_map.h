@@ -116,13 +116,32 @@ class NavMap : public NavRid {
 	int pm_edge_connection_count = 0;
 	int pm_edge_free_count = 0;
 
+	bool sphere_map = false;
+
+
 public:
 	NavMap();
 	~NavMap();
 
 	void set_up(Vector3 p_up);
-	Vector3 get_up() const {
+	Vector3 get_up(const Vector3& point) const {
+		if (sphere_map)
+		{
+			return point.normalized();
+		}
+
 		return up;
+	}
+
+	void set_sphere_map(bool p_sphere_map)
+	{
+		sphere_map = p_sphere_map;
+		regenerate_polygons = true;
+	}
+
+	bool get_sphere_map() const
+	{
+		return sphere_map;
 	}
 
 	void set_cell_size(real_t p_cell_size);
@@ -217,6 +236,7 @@ private:
 	void _update_rvo_obstacles_tree_2d();
 	void _update_rvo_agents_tree_2d();
 	void _update_rvo_agents_tree_3d();
+
 };
 
 #endif // NAV_MAP_H

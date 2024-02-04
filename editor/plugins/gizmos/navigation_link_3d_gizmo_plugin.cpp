@@ -58,7 +58,7 @@ void NavigationLink3DGizmoPlugin::redraw(EditorNode3DGizmo *p_gizmo) {
 
 	RID nav_map = link->get_world_3d()->get_navigation_map();
 	real_t search_radius = NavigationServer3D::get_singleton()->map_get_link_connection_radius(nav_map);
-	Vector3 up_vector = NavigationServer3D::get_singleton()->map_get_up(nav_map);
+	Vector3 up_vector = NavigationServer3D::get_singleton()->map_get_up(nav_map, p_gizmo->get_node_3d()->get_global_position());
 	Vector3::Axis up_axis = up_vector.max_axis_index();
 
 	Vector3 start_position = link->get_start_position();

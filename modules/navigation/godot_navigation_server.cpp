@@ -145,11 +145,11 @@ COMMAND_2(map_set_up, RID, p_map, Vector3, p_up) {
 	map->set_up(p_up);
 }
 
-Vector3 GodotNavigationServer::map_get_up(RID p_map) const {
+Vector3 GodotNavigationServer::map_get_up(RID p_map, const Vector3& point) const {
 	const NavMap *map = map_owner.get_or_null(p_map);
 	ERR_FAIL_NULL_V(map, Vector3());
 
-	return map->get_up();
+	return map->get_up(point);
 }
 
 COMMAND_2(map_set_cell_size, RID, p_map, real_t, p_cell_size) {

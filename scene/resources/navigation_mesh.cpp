@@ -34,9 +34,7 @@
 #include "servers/navigation_server_3d.h"
 #endif // DEBUG_ENABLED
 
-void NavigationMesh::create_from_mesh(const Ref<Mesh> &p_mesh) {
-	ERR_FAIL_COND(p_mesh.is_null());
-
+void NavigationMesh::create_from_mesh_no_notif(const Ref<Mesh> &p_mesh) {
 	vertices = Vector<Vector3>();
 	clear_polygons();
 
@@ -67,9 +65,53 @@ void NavigationMesh::create_from_mesh(const Ref<Mesh> &p_mesh) {
 			vi.write[1] = r[j + 1] + from;
 			vi.write[2] = r[j + 2] + from;
 
-			add_polygon(vi);
+			add_polygon_no_notif(vi);
 		}
 	}
+}
+
+void NavigationMesh::create_from_mesh(const Ref<Mesh> &p_mesh) {
+	create_from_mesh_no_notif(p_mesh);
+	notify_property_list_changed();
+}
+
+void NavigationMesh::create_from_mesh_async(const Ref<Mesh> &p_mesh) {
+	
+	ERR_FAIL_COND(p_mesh.is_null());
+	if (generator_task == nullptr) {
+		generator_task = memnew(CreateFromMeshTask3D(p_mesh));
+		generator_task->owner = this;
+		generator_task->status = CreateFromMeshTask3D::TaskStatus::BAKING_STARTED;
+		generator_task->thread_task_id = WorkerThreadPool::get_singleton()->add_native_task(&NavigationMesh::threaded_create_from_mesh, generator_task, false, SNAME("NavMeshCreateMesh"));
+	}
+	create_from_mesh(p_mesh);
+	get_mesh_complete_status();
+}
+
+void NavigationMesh::threaded_create_from_mesh(void *p_arg) {
+	CreateFromMeshTask3D *generator_task = static_cast<CreateFromMeshTask3D *>(p_arg);
+	/*
+	generator_task->owner->create_from_mesh_no_notif(generator_task->input_mesh);
+	generator_task->status = CreateFromMeshTask3D::TaskStatus::BAKING_FINISHED;
+	*/
+	int c = 0;
+	for (int i = 0; i < 100; i++)
+	{
+		c = i + 1;
+	}
+}
+
+bool NavigationMesh::get_mesh_complete_status() {
+	if (generator_task != nullptr) {
+		if (WorkerThreadPool::get_singleton()->is_task_completed(generator_task->thread_task_id)) {
+			WorkerThreadPool::get_singleton()->wait_for_task_completion(generator_task->thread_task_id);
+			memdelete(generator_task);
+			generator_task = nullptr;
+			notify_property_list_changed();
+			return true;
+		}
+	}
+	return false;
 }
 
 void NavigationMesh::set_sample_partition_type(SamplePartitionType p_value) {
@@ -321,10 +363,14 @@ Array NavigationMesh::_get_polygons() const {
 	return ret;
 }
 
-void NavigationMesh::add_polygon(const Vector<int> &p_polygon) {
+void NavigationMesh::add_polygon_no_notif(const Vector<int> &p_polygon) {
 	Polygon polygon;
 	polygon.indices = p_polygon;
 	polygons.push_back(polygon);
+}
+
+void NavigationMesh::add_polygon(const Vector<int> &p_polygon) {
+	add_polygon_no_notif(p_polygon);
 	notify_property_list_changed();
 }
 
@@ -613,4 +659,14 @@ bool NavigationMesh::_get(const StringName &p_name, Variant &r_ret) const {
 }
 #endif // DISABLE_DEPRECATED
 
-NavigationMesh::NavigationMesh() {}
+NavigationMesh::NavigationMesh() {
+	generator_task = nullptr;
+}
+
+NavigationMesh::~NavigationMesh() {
+	if (generator_task != nullptr) {
+		WorkerThreadPool::get_singleton()->wait_for_task_completion(generator_task->thread_task_id);
+		memdelete(generator_task);
+	}
+	generator_task = nullptr;
+}

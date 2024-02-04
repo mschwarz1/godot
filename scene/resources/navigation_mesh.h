@@ -36,6 +36,24 @@
 class NavigationMesh : public Resource {
 	GDCLASS(NavigationMesh, Resource);
 
+	class CreateFromMeshTask3D {
+		public:
+		enum TaskStatus {
+			BAKING_STARTED,
+			BAKING_FINISHED,
+			BAKING_FAILED,
+			CALLBACK_DISPATCHED,
+			CALLBACK_FAILED,
+		};
+		CreateFromMeshTask3D(const Ref<Mesh> &p_mesh):input_mesh(p_mesh){};
+		const Ref<Mesh> &input_mesh;
+		NavigationMesh* owner;
+		WorkerThreadPool::TaskID thread_task_id = WorkerThreadPool::INVALID_TASK_ID;
+		TaskStatus status = CreateFromMeshTask3D::TaskStatus::BAKING_STARTED;
+	};
+
+	static void threaded_create_from_mesh(void *p_arg);
+
 	Vector<Vector3> vertices;
 	struct Polygon {
 		Vector<int> indices;
@@ -179,23 +197,32 @@ public:
 	void set_filter_baking_aabb_offset(const Vector3 &p_aabb_offset);
 	Vector3 get_filter_baking_aabb_offset() const;
 
+	void create_from_mesh_no_notif(const Ref<Mesh> &p_mesh);
 	void create_from_mesh(const Ref<Mesh> &p_mesh);
+	void create_from_mesh_async(const Ref<Mesh> &p_mesh);
 
 	void set_vertices(const Vector<Vector3> &p_vertices);
 	Vector<Vector3> get_vertices() const;
 
 	void add_polygon(const Vector<int> &p_polygon);
+	void add_polygon_no_notif(const Vector<int> &p_polygon);
 	int get_polygon_count() const;
 	Vector<int> get_polygon(int p_idx);
 	void clear_polygons();
 
 	void clear();
 
+	bool get_mesh_complete_status();
+
 #ifdef DEBUG_ENABLED
 	Ref<ArrayMesh> get_debug_mesh();
 #endif // DEBUG_ENABLED
 
 	NavigationMesh();
+	~NavigationMesh();
+private:
+	CreateFromMeshTask3D* generator_task;
+
 };
 
 VARIANT_ENUM_CAST(NavigationMesh::SamplePartitionType);

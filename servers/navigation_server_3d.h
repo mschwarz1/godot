@@ -73,7 +73,7 @@ public:
 	virtual void map_set_up(RID p_map, Vector3 p_up) = 0;
 
 	/// Returns the map UP direction.
-	virtual Vector3 map_get_up(RID p_map) const = 0;
+	virtual Vector3 map_get_up(RID p_map, const Vector3& point) const = 0;
 
 	/// Set the map cell size used to weld the navigation mesh polygons.
 	virtual void map_set_cell_size(RID p_map, real_t p_cell_size) = 0;

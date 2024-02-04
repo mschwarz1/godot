@@ -109,7 +109,7 @@ public:
 	virtual bool map_is_active(RID p_map) const override;
 
 	COMMAND_2(map_set_up, RID, p_map, Vector3, p_up);
-	virtual Vector3 map_get_up(RID p_map) const override;
+	virtual Vector3 map_get_up(RID p_map, const Vector3& point) const override;
 
 	COMMAND_2(map_set_cell_size, RID, p_map, real_t, p_cell_size);
 	virtual real_t map_get_cell_size(RID p_map) const override;

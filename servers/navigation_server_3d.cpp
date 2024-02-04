@@ -40,7 +40,7 @@ void NavigationServer3D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("map_set_active", "map", "active"), &NavigationServer3D::map_set_active);
 	ClassDB::bind_method(D_METHOD("map_is_active", "map"), &NavigationServer3D::map_is_active);
 	ClassDB::bind_method(D_METHOD("map_set_up", "map", "up"), &NavigationServer3D::map_set_up);
-	ClassDB::bind_method(D_METHOD("map_get_up", "map"), &NavigationServer3D::map_get_up);
+	ClassDB::bind_method(D_METHOD("map_get_up", "map", "point"), &NavigationServer3D::map_get_up);
 	ClassDB::bind_method(D_METHOD("map_set_cell_size", "map", "cell_size"), &NavigationServer3D::map_set_cell_size);
 	ClassDB::bind_method(D_METHOD("map_get_cell_size", "map"), &NavigationServer3D::map_get_cell_size);
 	ClassDB::bind_method(D_METHOD("map_set_cell_height", "map", "cell_height"), &NavigationServer3D::map_set_cell_height);
@@ -221,6 +221,7 @@ NavigationServer3D::NavigationServer3D() {
 	GLOBAL_DEF_BASIC("navigation/3d/default_cell_size", 0.25);
 	GLOBAL_DEF_BASIC("navigation/3d/default_cell_height", 0.25);
 	GLOBAL_DEF("navigation/3d/default_up", Vector3(0, 1, 0));
+	GLOBAL_DEF("navigation/3d/sphere_map", false);
 	GLOBAL_DEF("navigation/3d/use_edge_connections", true);
 	GLOBAL_DEF_BASIC("navigation/3d/default_edge_connection_margin", 0.25);
 	GLOBAL_DEF_BASIC("navigation/3d/default_link_connection_radius", 1.0);

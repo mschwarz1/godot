@@ -458,12 +458,12 @@ Vector<Vector3> NavMap::get_path(Vector3 p_origin, Vector3 p_destination, bool p
 			// Set left and right points of the pathway between polygons.
 			Vector3 left = p->back_navigation_edge_pathway_start;
 			Vector3 right = p->back_navigation_edge_pathway_end;
-			if (THREE_POINTS_CROSS_PRODUCT(apex_point, left, right).dot(up) < 0) {
+			if (THREE_POINTS_CROSS_PRODUCT(apex_point, left, right).dot(get_up(apex_point)) < 0) {
 				SWAP(left, right);
 			}
 
 			bool skip = false;
-			if (THREE_POINTS_CROSS_PRODUCT(apex_point, left_portal, left).dot(up) >= 0) {
+			if (THREE_POINTS_CROSS_PRODUCT(apex_point, left_portal, left).dot(get_up(apex_point)) >= 0) {
 				//process
 				if (left_portal == apex_point || THREE_POINTS_CROSS_PRODUCT(apex_point, left, right_portal).dot(up) > 0) {
 					left_poly = p;
@@ -484,9 +484,9 @@ Vector<Vector3> NavMap::get_path(Vector3 p_origin, Vector3 p_destination, bool p
 				}
 			}
 
-			if (!skip && THREE_POINTS_CROSS_PRODUCT(apex_point, right_portal, right).dot(up) <= 0) {
+			if (!skip && THREE_POINTS_CROSS_PRODUCT(apex_point, right_portal, right).dot(get_up(apex_point)) <= 0) {
 				//process
-				if (right_portal == apex_point || THREE_POINTS_CROSS_PRODUCT(apex_point, right, left_portal).dot(up) < 0) {
+				if (right_portal == apex_point || THREE_POINTS_CROSS_PRODUCT(apex_point, right, left_portal).dot(get_up(apex_point)) < 0) {
 					right_poly = p;
 					right_portal = right;
 				} else {
@@ -1339,7 +1339,7 @@ void NavMap::clip_path(const LocalVector<gd::NavigationPoly> &p_navigation_polys
 		return;
 	}
 	Plane cut_plane;
-	cut_plane.normal = (from - p_to_point).cross(up);
+	cut_plane.normal = (from - p_to_point).cross(get_up(from));
 	if (cut_plane.normal == Vector3()) {
 		return;
 	}

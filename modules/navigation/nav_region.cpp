@@ -214,9 +214,10 @@ void NavRegion::update_polygons() {
 	if (!Math::is_equal_approx(double(map->get_cell_height()), double(mesh->get_cell_height()))) {
 		ERR_PRINT_ONCE(vformat("Navigation map synchronization error. Attempted to update a navigation region with a navigation mesh that uses a `cell_height` of %s while assigned to a navigation map set to a `cell_height` of %s. The cell height for navigation maps can be changed by using the NavigationServer map_set_cell_height() function. The cell height for default navigation maps can also be changed in the ProjectSettings.", double(mesh->get_cell_height()), double(map->get_cell_height())));
 	}
-
-	if (map && Math::rad_to_deg(map->get_up().angle_to(transform.basis.get_column(1))) >= 90.0f) {
-		ERR_PRINT_ONCE("Navigation map synchronization error. Attempted to update a navigation region transform rotated 90 degrees or more away from the current navigation map UP orientation.");
+	if (!map->get_sphere_map()) {
+		if (map && Math::rad_to_deg(map->get_up(Vector3()).angle_to(transform.basis.get_column(1))) >= 90.0f) {
+			ERR_PRINT_ONCE("Navigation map synchronization error. Attempted to update a navigation region transform rotated 90 degrees or more away from the current navigation map UP orientation.");
+		}
 	}
 #endif // DEBUG_ENABLED
 
@@ -286,7 +287,7 @@ void NavRegion::update_polygons() {
 				Vector3 epa = transform.xform(vertices_r[indices[j - 2]]);
 				Vector3 epb = transform.xform(vertices_r[indices[j - 1]]);
 
-				sum += map->get_up().dot((epb - epa).cross(point_position - epa));
+				sum += map->get_up(point_position).dot((epb - epa).cross(point_position - epa));
 			}
 		}
 

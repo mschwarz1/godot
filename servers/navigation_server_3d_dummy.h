@@ -42,7 +42,7 @@ public:
 	void map_set_active(RID p_map, bool p_active) override {}
 	bool map_is_active(RID p_map) const override { return false; }
 	void map_set_up(RID p_map, Vector3 p_up) override {}
-	Vector3 map_get_up(RID p_map) const override { return Vector3(); }
+	Vector3 map_get_up(RID p_map, const Vector3& point) const override { return Vector3(); }
 	void map_set_cell_size(RID p_map, real_t p_cell_size) override {}
 	real_t map_get_cell_size(RID p_map) const override { return 0; }
 	void map_set_cell_height(RID p_map, real_t p_cell_height) override {}
