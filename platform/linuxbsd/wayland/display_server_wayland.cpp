@@ -100,8 +100,8 @@ void DisplayServerWayland::_resize_window(const Size2i &p_size) {
 	wd.rect.size = p_size;
 
 #ifdef RD_ENABLED
-	if (wd.visible && context_rd) {
-		context_rd->window_resize(MAIN_WINDOW_ID, wd.rect.size.width, wd.rect.size.height);
+	if (wd.visible && rendering_context) {
+		rendering_context->window_set_size(MAIN_WINDOW_ID, wd.rect.size.width, wd.rect.size.height);
 	}
 #endif
 
@@ -140,10 +140,10 @@ void DisplayServerWayland::_show_window() {
 		// the only acceptable way of implementing window showing is to move the
 		// graphics context window creation logic here.
 #ifdef RD_ENABLED
-		if (context_rd) {
+		if (rendering_context) {
 			union {
 #ifdef VULKAN_ENABLED
-				VulkanContextWayland::WindowPlatformData vulkan;
+				RenderingContextDriverVulkanWayland::WindowPlatformData vulkan;
 #endif
 			} wpd;
 #ifdef VULKAN_ENABLED
@@ -152,14 +152,17 @@ void DisplayServerWayland::_show_window() {
 				wpd.vulkan.display = wayland_thread.get_wl_display();
 			}
 #endif
-			Error err = context_rd->window_create(wd.id, wd.vsync_mode, wd.rect.size.width, wd.rect.size.height, &wpd);
-			ERR_FAIL_COND_MSG(err != OK, vformat("Can't create a %s window", context_rd->get_api_name()));
+			Error err = rendering_context->window_create(wd.id, &wpd);
+			ERR_FAIL_COND_MSG(err != OK, vformat("Can't create a %s window", rendering_driver));
 
-			emulate_vsync = (context_rd->get_vsync_mode(wd.id) == DisplayServer::VSYNC_ENABLED);
+			rendering_context->window_set_size(wd.id, wd.rect.size.width, wd.rect.size.height);
+			rendering_context->window_set_vsync_mode(wd.id, wd.vsync_mode);
+
+			emulate_vsync = (rendering_context->window_get_vsync_mode(wd.id) == DisplayServer::VSYNC_ENABLED);
 
 			if (emulate_vsync) {
 				print_verbose("VSYNC: manually throttling frames using MAILBOX.");
-				context_rd->set_vsync_mode(wd.id, DisplayServer::VSYNC_MAILBOX);
+				rendering_context->window_set_vsync_mode(wd.id, DisplayServer::VSYNC_MAILBOX);
 			}
 		}
 #endif
@@ -189,19 +192,35 @@ void DisplayServerWayland::_show_window() {
 
 bool DisplayServerWayland::has_feature(Feature p_feature) const {
 	switch (p_feature) {
+#ifndef DISABLE_DEPRECATED
+		case FEATURE_GLOBAL_MENU: {
+			return (native_menu && native_menu->has_feature(NativeMenu::FEATURE_GLOBAL_MENU));
+		} break;
+#endif
 		case FEATURE_MOUSE:
+		case FEATURE_MOUSE_WARP:
 		case FEATURE_CLIPBOARD:
 		case FEATURE_CURSOR_SHAPE:
+		case FEATURE_CUSTOM_CURSOR_SHAPE:
 		case FEATURE_WINDOW_TRANSPARENCY:
+		case FEATURE_HIDPI:
 		case FEATURE_SWAP_BUFFERS:
 		case FEATURE_KEEP_SCREEN_ON:
-		case FEATURE_CLIPBOARD_PRIMARY:
-#ifdef DBUS_ENABLED
-		case FEATURE_NATIVE_DIALOG:
-#endif
-		case FEATURE_HIDPI: {
+		case FEATURE_CLIPBOARD_PRIMARY: {
 			return true;
 		} break;
+
+#ifdef DBUS_ENABLED
+		case FEATURE_NATIVE_DIALOG: {
+			return true;
+		} break;
+#endif
+
+#ifdef SPEECHD_ENABLED
+		case FEATURE_TEXT_TO_SPEECH: {
+			return true;
+		} break;
+#endif
 
 		default: {
 			return false;
@@ -270,6 +289,10 @@ bool DisplayServerWayland::is_dark_mode() const {
 			// Preference unknown.
 			return false;
 	}
+}
+
+void DisplayServerWayland::set_system_theme_change_callback(const Callable &p_callable) {
+	portal_desktop->set_system_theme_change_callback(p_callable);
 }
 
 Error DisplayServerWayland::file_dialog_show(const String &p_title, const String &p_current_directory, const String &p_filename, bool p_show_hidden, FileDialogMode p_mode, const Vector<String> &p_filters, const Callable &p_callback) {
@@ -562,9 +585,9 @@ void DisplayServerWayland::screen_set_keep_on(bool p_enable) {
 bool DisplayServerWayland::screen_is_kept_on() const {
 #ifdef DBUS_ENABLED
 	return wayland_thread.window_get_idle_inhibition(MAIN_WINDOW_ID) || screensaver_inhibited;
-#endif
-
+#else
 	return wayland_thread.window_get_idle_inhibition(MAIN_WINDOW_ID);
+#endif
 }
 
 Vector<DisplayServer::WindowID> DisplayServerWayland::get_window_list() const {
@@ -860,11 +883,11 @@ bool DisplayServerWayland::window_is_focused(WindowID p_window_id) const {
 }
 
 bool DisplayServerWayland::window_can_draw(DisplayServer::WindowID p_window_id) const {
-	return frame;
+	return !suspended;
 }
 
 bool DisplayServerWayland::can_any_window_draw() const {
-	return frame;
+	return !suspended;
 }
 
 void DisplayServerWayland::window_set_ime_active(const bool p_active, DisplayServer::WindowID p_window_id) {
@@ -885,14 +908,14 @@ void DisplayServerWayland::window_set_vsync_mode(DisplayServer::VSyncMode p_vsyn
 	MutexLock mutex_lock(wayland_thread.mutex);
 
 #ifdef RD_ENABLED
-	if (context_rd) {
-		context_rd->set_vsync_mode(p_window_id, p_vsync_mode);
+	if (rendering_context) {
+		rendering_context->window_set_vsync_mode(p_window_id, p_vsync_mode);
 
-		emulate_vsync = (context_rd->get_vsync_mode(p_window_id) == DisplayServer::VSYNC_ENABLED);
+		emulate_vsync = (rendering_context->window_get_vsync_mode(p_window_id) == DisplayServer::VSYNC_ENABLED);
 
 		if (emulate_vsync) {
 			print_verbose("VSYNC: manually throttling frames using MAILBOX.");
-			context_rd->set_vsync_mode(p_window_id, DisplayServer::VSYNC_MAILBOX);
+			rendering_context->window_set_vsync_mode(p_window_id, DisplayServer::VSYNC_MAILBOX);
 		}
 	}
 #endif // VULKAN_ENABLED
@@ -917,8 +940,8 @@ DisplayServer::VSyncMode DisplayServerWayland::window_get_vsync_mode(DisplayServ
 	}
 
 #ifdef VULKAN_ENABLED
-	if (context_rd) {
-		return context_rd->get_vsync_mode(p_window_id);
+	if (rendering_context) {
+		return rendering_context->window_get_vsync_mode(p_window_id);
 	}
 #endif // VULKAN_ENABLED
 
@@ -983,36 +1006,9 @@ void DisplayServerWayland::cursor_set_custom_image(const Ref<Resource> &p_cursor
 			wayland_thread.cursor_shape_clear_custom_image(p_shape);
 		}
 
-		Ref<Texture2D> texture = p_cursor;
-		ERR_FAIL_COND(!texture.is_valid());
-		Size2i texture_size;
-
-		Ref<AtlasTexture> atlas_texture = texture;
-
-		if (atlas_texture.is_valid()) {
-			texture_size.width = atlas_texture->get_region().size.x;
-			texture_size.height = atlas_texture->get_region().size.y;
-		} else {
-			texture_size.width = texture->get_width();
-			texture_size.height = texture->get_height();
-		}
-
-		ERR_FAIL_COND(p_hotspot.x < 0 || p_hotspot.y < 0);
-
-		// NOTE: The Wayland protocol says nothing about cursor size limits, yet if
-		// the texture is larger than 256x256 it won't show at least on sway.
-		ERR_FAIL_COND(texture_size.width > 256 || texture_size.height > 256);
-		ERR_FAIL_COND(p_hotspot.x > texture_size.width || p_hotspot.y > texture_size.height);
-		ERR_FAIL_COND(texture_size.height == 0 || texture_size.width == 0);
-
-		Ref<Image> image = texture->get_image();
-		ERR_FAIL_COND(!image.is_valid());
-
-		if (image->is_compressed()) {
-			image = image->duplicate(true);
-			Error err = image->decompress();
-			ERR_FAIL_COND_MSG(err != OK, "Couldn't decompress VRAM-compressed custom mouse cursor image. Switch to a lossless compression mode in the Import dock.");
-		}
+		Rect2 atlas_rect;
+		Ref<Image> image = _get_cursor_image_from_resource(p_cursor, p_hotspot, atlas_rect);
+		ERR_FAIL_COND(image.is_null());
 
 		CustomCursor &cursor = custom_cursors[p_shape];
 
@@ -1136,7 +1132,32 @@ void DisplayServerWayland::process_events() {
 
 	wayland_thread.keyboard_echo_keys();
 
-	frame = wayland_thread.get_reset_frame();
+	if (!suspended) {
+		if (emulate_vsync) {
+			// Due to various reasons, we manually handle display synchronization by
+			// waiting for a frame event (request to draw) or, if available, the actual
+			// window's suspend status. When a window is suspended, we can avoid drawing
+			// altogether, either because the compositor told us that we don't need to or
+			// because the pace of the frame events became unreliable.
+			bool frame = wayland_thread.wait_frame_suspend_ms(1000);
+			if (!frame) {
+				suspended = true;
+			}
+		} else {
+			if (wayland_thread.is_suspended()) {
+				suspended = true;
+			}
+		}
+
+		if (suspended) {
+			DEBUG_LOG_WAYLAND("Window suspended.");
+		}
+	} else {
+		if (wayland_thread.get_reset_frame()) {
+			// At last, a sign of life! We're no longer suspended.
+			suspended = false;
+		}
+	}
 
 	wayland_thread.mutex.unlock();
 
@@ -1226,6 +1247,8 @@ DisplayServerWayland::DisplayServerWayland(const String &p_rendering_driver, Win
 	// Input.
 	Input::get_singleton()->set_event_dispatch_function(dispatch_input_events);
 
+	native_menu = memnew(NativeMenu);
+
 #ifdef SPEECHD_ENABLED
 	// Init TTS
 	tts = memnew(TTS_Linux);
@@ -1236,15 +1259,15 @@ DisplayServerWayland::DisplayServerWayland(const String &p_rendering_driver, Win
 #ifdef RD_ENABLED
 #ifdef VULKAN_ENABLED
 	if (p_rendering_driver == "vulkan") {
-		context_rd = memnew(VulkanContextWayland);
+		rendering_context = memnew(RenderingContextDriverVulkanWayland);
 	}
 #endif
 
-	if (context_rd) {
-		if (context_rd->initialize() != OK) {
-			ERR_PRINT(vformat("Could not initialize %s", context_rd->get_api_name()));
-			memdelete(context_rd);
-			context_rd = nullptr;
+	if (rendering_context) {
+		if (rendering_context->initialize() != OK) {
+			ERR_PRINT(vformat("Could not initialize %s", p_rendering_driver));
+			memdelete(rendering_context);
+			rendering_context = nullptr;
 			r_error = ERR_CANT_CREATE;
 			return;
 		}
@@ -1329,9 +1352,10 @@ DisplayServerWayland::DisplayServerWayland(const String &p_rendering_driver, Win
 	_show_window();
 
 #ifdef RD_ENABLED
-	if (context_rd) {
+	if (rendering_context) {
 		rendering_device = memnew(RenderingDevice);
-		rendering_device->initialize(context_rd);
+		rendering_device->initialize(rendering_context, MAIN_WINDOW_ID);
+		rendering_device->screen_create(MAIN_WINDOW_ID);
 
 		RendererCompositorRD::make_current();
 	}
@@ -1349,10 +1373,20 @@ DisplayServerWayland::DisplayServerWayland(const String &p_rendering_driver, Win
 
 DisplayServerWayland::~DisplayServerWayland() {
 	// TODO: Multiwindow support.
+
+	if (native_menu) {
+		memdelete(native_menu);
+		native_menu = nullptr;
+	}
+
 	if (main_window.visible) {
 #ifdef VULKAN_ENABLED
-		if (context_rd) {
-			context_rd->window_destroy(MAIN_WINDOW_ID);
+		if (rendering_device) {
+			rendering_device->screen_free(MAIN_WINDOW_ID);
+		}
+
+		if (rendering_context) {
+			rendering_context->window_destroy(MAIN_WINDOW_ID);
 		}
 #endif
 
@@ -1374,12 +1408,11 @@ DisplayServerWayland::~DisplayServerWayland() {
 	// Destroy all drivers.
 #ifdef RD_ENABLED
 	if (rendering_device) {
-		rendering_device->finalize();
 		memdelete(rendering_device);
 	}
 
-	if (context_rd) {
-		memdelete(context_rd);
+	if (rendering_context) {
+		memdelete(rendering_context);
 	}
 #endif
 

@@ -177,6 +177,7 @@ public:
 
 		Rect2i rect;
 		DisplayServer::WindowMode mode = DisplayServer::WINDOW_MODE_WINDOWED;
+		bool suspended = false;
 
 		// These are true by default as it isn't guaranteed that we'll find an
 		// xdg-shell implementation with wm_capabilities available. If and once we
@@ -307,7 +308,7 @@ public:
 
 	struct TabletToolData {
 		Point2i position;
-		Vector2i tilt;
+		Vector2 tilt;
 		uint32_t pressure = 0;
 
 		BitField<MouseButtonMask> pressed_button_mask;
@@ -321,10 +322,20 @@ public:
 		// be used as a mouse...), but we'll hack one in with the current ticks.
 		uint64_t button_time = 0;
 
+		uint64_t motion_time = 0;
+
+		uint32_t proximity_serial = 0;
+		struct wl_surface *proximal_surface = nullptr;
+	};
+
+	struct TabletToolState {
+		struct wl_seat *wl_seat = nullptr;
+
+		struct wl_surface *last_surface = nullptr;
 		bool is_eraser = false;
 
-		bool in_proximity = false;
-		bool touching = false;
+		TabletToolData data_pending;
+		TabletToolData data;
 	};
 
 	struct OfferState {
@@ -424,9 +435,6 @@ public:
 		struct zwp_tablet_seat_v2 *wp_tablet_seat = nullptr;
 
 		List<struct zwp_tablet_tool_v2 *> tablet_tools;
-
-		TabletToolData tablet_tool_data_buffer;
-		TabletToolData tablet_tool_data;
 	};
 
 	struct CustomCursor {
@@ -502,6 +510,8 @@ private:
 
 	static void _wl_surface_on_enter(void *data, struct wl_surface *wl_surface, struct wl_output *wl_output);
 	static void _wl_surface_on_leave(void *data, struct wl_surface *wl_surface, struct wl_output *wl_output);
+	static void _wl_surface_on_preferred_buffer_scale(void *data, struct wl_surface *wl_surface, int32_t factor);
+	static void _wl_surface_on_preferred_buffer_transform(void *data, struct wl_surface *wl_surface, uint32_t transform);
 
 	static void _frame_wl_callback_on_done(void *data, struct wl_callback *wl_callback, uint32_t callback_data);
 
@@ -527,6 +537,7 @@ private:
 	static void _wl_pointer_on_axis_stop(void *data, struct wl_pointer *wl_pointer, uint32_t time, uint32_t axis);
 	static void _wl_pointer_on_axis_discrete(void *data, struct wl_pointer *wl_pointer, uint32_t axis, int32_t discrete);
 	static void _wl_pointer_on_axis_value120(void *data, struct wl_pointer *wl_pointer, uint32_t axis, int32_t value120);
+	static void _wl_pointer_on_axis_relative_direction(void *data, struct wl_pointer *wl_pointer, uint32_t axis, uint32_t direction);
 
 	static void _wl_keyboard_on_keymap(void *data, struct wl_keyboard *wl_keyboard, uint32_t format, int32_t fd, uint32_t size);
 	static void _wl_keyboard_on_enter(void *data, struct wl_keyboard *wl_keyboard, uint32_t serial, struct wl_surface *surface, struct wl_array *keys);
@@ -619,6 +630,8 @@ private:
 	static constexpr struct wl_surface_listener wl_surface_listener = {
 		.enter = _wl_surface_on_enter,
 		.leave = _wl_surface_on_leave,
+		.preferred_buffer_scale = _wl_surface_on_preferred_buffer_scale,
+		.preferred_buffer_transform = _wl_surface_on_preferred_buffer_transform,
 	};
 
 	static constexpr struct wl_callback_listener frame_wl_callback_listener {
@@ -654,6 +667,7 @@ private:
 		.axis_stop = _wl_pointer_on_axis_stop,
 		.axis_discrete = _wl_pointer_on_axis_discrete,
 		.axis_value120 = _wl_pointer_on_axis_value120,
+		.axis_relative_direction = _wl_pointer_on_axis_relative_direction,
 	};
 
 	static constexpr struct wl_keyboard_listener wl_keyboard_listener = {
@@ -848,6 +862,7 @@ public:
 	static WindowState *wl_surface_get_window_state(struct wl_surface *p_surface);
 	static ScreenState *wl_output_get_screen_state(struct wl_output *p_output);
 	static SeatState *wl_seat_get_seat_state(struct wl_seat *p_seat);
+	static TabletToolState *wp_tablet_tool_get_state(struct zwp_tablet_tool_v2 *p_tool);
 	static OfferState *wl_data_offer_get_offer_state(struct wl_data_offer *p_offer);
 
 	static OfferState *wp_primary_selection_offer_get_offer_state(struct zwp_primary_selection_offer_v1 *p_offer);
@@ -933,6 +948,9 @@ public:
 
 	void set_frame();
 	bool get_reset_frame();
+	bool wait_frame_suspend_ms(int p_timeout);
+
+	bool is_suspended() const;
 
 	Error init();
 	void destroy();

@@ -481,6 +481,7 @@ bool GDMono::_load_project_assembly() {
 	assembly_path = ProjectSettings::get_singleton()->globalize_path(assembly_path);
 
 	if (!FileAccess::exists(assembly_path)) {
+		ERR_PRINT_ED((".NET: Assembly path did not exist." + assembly_path));
 		return false;
 	}
 
