@@ -75,6 +75,7 @@ public:
 		LOOP_PINGPONG,
 	};
 
+	// LoopedFlag is used in Animataion to "process the keys at both ends correct".
 	enum LoopedFlag {
 		LOOPED_FLAG_NONE,
 		LOOPED_FLAG_END,
@@ -187,6 +188,7 @@ private:
 	};
 
 	/* BEZIER TRACK */
+
 	struct BezierKey {
 		Vector2 in_handle; // Relative (x always <0)
 		Vector2 out_handle; // Relative (x always >0)
@@ -223,7 +225,7 @@ private:
 		}
 	};
 
-	/* AUDIO TRACK */
+	/* ANIMATION TRACK */
 
 	struct AnimationTrack : public Track {
 		Vector<TKey<StringName>> values;
@@ -264,7 +266,7 @@ private:
 	_FORCE_INLINE_ void _track_get_key_indices_in_range(const Vector<T> &p_array, double from_time, double to_time, List<int> *p_indices, bool p_is_backward) const;
 
 	double length = 1.0;
-	real_t step = 0.1;
+	real_t step = 1.0 / 30;
 	LoopMode loop_mode = LOOP_NONE;
 
 	void _track_update_hash(int p_track);

@@ -587,7 +587,7 @@ void InputEventConfigurationDialog::_notification(int p_what) {
 
 void InputEventConfigurationDialog::popup_and_configure(const Ref<InputEvent> &p_event, const String &p_current_action_name) {
 	if (p_event.is_valid()) {
-		_set_event(p_event->duplicate(), p_event);
+		_set_event(p_event->duplicate(), p_event->duplicate());
 	} else {
 		// Clear Event
 		_set_event(Ref<InputEvent>(), Ref<InputEvent>());
@@ -668,6 +668,7 @@ InputEventConfigurationDialog::InputEventConfigurationDialog() {
 	manual_vbox->add_child(input_list_search);
 
 	input_list_tree = memnew(Tree);
+	input_list_tree->set_auto_translate_mode(AUTO_TRANSLATE_MODE_DISABLED);
 	input_list_tree->set_custom_minimum_size(Size2(0, 100 * EDSCALE)); // Min height for tree
 	input_list_tree->connect("item_selected", callable_mp(this, &InputEventConfigurationDialog::_input_list_item_selected));
 	input_list_tree->set_v_size_flags(Control::SIZE_EXPAND_FILL);

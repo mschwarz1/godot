@@ -212,7 +212,7 @@ String DisplayServer::global_menu_get_item_submenu(const String &p_menu_root, in
 	ERR_FAIL_NULL_V(nmenu, String());
 	RID rid = nmenu->get_item_submenu(_get_rid_from_name(nmenu, p_menu_root), p_idx);
 	if (!nmenu->is_system_menu(rid)) {
-		for (HashMap<String, RID>::Iterator E = menu_names.begin(); E;) {
+		for (HashMap<String, RID>::Iterator E = menu_names.begin(); E; ++E) {
 			if (E->value == rid) {
 				return E->key;
 			}
@@ -645,22 +645,22 @@ void DisplayServer::enable_for_stealing_focus(OS::ProcessID pid) {
 
 Error DisplayServer::dialog_show(String p_title, String p_description, Vector<String> p_buttons, const Callable &p_callback) {
 	WARN_PRINT("Native dialogs not supported by this display server.");
-	return OK;
+	return ERR_UNAVAILABLE;
 }
 
 Error DisplayServer::dialog_input_text(String p_title, String p_description, String p_partial, const Callable &p_callback) {
 	WARN_PRINT("Native dialogs not supported by this display server.");
-	return OK;
+	return ERR_UNAVAILABLE;
 }
 
 Error DisplayServer::file_dialog_show(const String &p_title, const String &p_current_directory, const String &p_filename, bool p_show_hidden, FileDialogMode p_mode, const Vector<String> &p_filters, const Callable &p_callback) {
 	WARN_PRINT("Native dialogs not supported by this display server.");
-	return OK;
+	return ERR_UNAVAILABLE;
 }
 
 Error DisplayServer::file_dialog_with_options_show(const String &p_title, const String &p_current_directory, const String &p_root, const String &p_filename, bool p_show_hidden, FileDialogMode p_mode, const Vector<String> &p_filters, const TypedArray<Dictionary> &p_options, const Callable &p_callback) {
 	WARN_PRINT("Native dialogs not supported by this display server.");
-	return OK;
+	return ERR_UNAVAILABLE;
 }
 
 int DisplayServer::keyboard_get_layout_count() const {
@@ -694,10 +694,6 @@ void DisplayServer::force_process_and_drop_events() {
 }
 
 void DisplayServer::release_rendering_thread() {
-	WARN_PRINT("Rendering thread not supported by this display server.");
-}
-
-void DisplayServer::make_rendering_thread() {
 	WARN_PRINT("Rendering thread not supported by this display server.");
 }
 
@@ -1014,6 +1010,8 @@ void DisplayServer::_bind_methods() {
 	BIND_ENUM_CONSTANT(FEATURE_SCREEN_CAPTURE);
 	BIND_ENUM_CONSTANT(FEATURE_STATUS_INDICATOR);
 	BIND_ENUM_CONSTANT(FEATURE_NATIVE_HELP);
+	BIND_ENUM_CONSTANT(FEATURE_NATIVE_DIALOG_INPUT);
+	BIND_ENUM_CONSTANT(FEATURE_NATIVE_DIALOG_FILE);
 
 	BIND_ENUM_CONSTANT(MOUSE_MODE_VISIBLE);
 	BIND_ENUM_CONSTANT(MOUSE_MODE_HIDDEN);

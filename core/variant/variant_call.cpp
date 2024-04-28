@@ -1644,6 +1644,8 @@ static void _register_variant_builtin_methods() {
 	bind_string_method(nocasecmp_to, sarray("to"), varray());
 	bind_string_method(naturalcasecmp_to, sarray("to"), varray());
 	bind_string_method(naturalnocasecmp_to, sarray("to"), varray());
+	bind_string_method(filecasecmp_to, sarray("to"), varray());
+	bind_string_method(filenocasecmp_to, sarray("to"), varray());
 	bind_string_method(length, sarray(), varray());
 	bind_string_method(substr, sarray("from", "len"), varray(-1));
 	bind_string_method(get_slice, sarray("delimiter", "slice"), varray());
@@ -1797,7 +1799,7 @@ static void _register_variant_builtin_methods() {
 	bind_method(Vector2, dot, sarray("with"), varray());
 	bind_method(Vector2, slide, sarray("n"), varray());
 	bind_method(Vector2, bounce, sarray("n"), varray());
-	bind_method(Vector2, reflect, sarray("n"), varray());
+	bind_method(Vector2, reflect, sarray("line"), varray());
 	bind_method(Vector2, cross, sarray("with"), varray());
 	bind_method(Vector2, abs, sarray(), varray());
 	bind_method(Vector2, sign, sarray(), varray());
@@ -1894,7 +1896,7 @@ static void _register_variant_builtin_methods() {
 	bind_method(Vector3, project, sarray("b"), varray());
 	bind_method(Vector3, slide, sarray("n"), varray());
 	bind_method(Vector3, bounce, sarray("n"), varray());
-	bind_method(Vector3, reflect, sarray("n"), varray());
+	bind_method(Vector3, reflect, sarray("direction"), varray());
 	bind_method(Vector3, sign, sarray(), varray());
 	bind_method(Vector3, octahedron_encode, sarray(), varray());
 	bind_static_method(Vector3, octahedron_decode, sarray("uv"), varray());

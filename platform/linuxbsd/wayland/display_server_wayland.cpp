@@ -210,8 +210,10 @@ bool DisplayServerWayland::has_feature(Feature p_feature) const {
 			return true;
 		} break;
 
+		//case FEATURE_NATIVE_DIALOG:
+		//case FEATURE_NATIVE_DIALOG_INPUT:
 #ifdef DBUS_ENABLED
-		case FEATURE_NATIVE_DIALOG: {
+		case FEATURE_NATIVE_DIALOG_FILE: {
 			return true;
 		} break;
 #endif
@@ -1159,6 +1161,12 @@ void DisplayServerWayland::process_events() {
 		}
 	}
 
+#ifdef DBUS_ENABLED
+	if (portal_desktop) {
+		portal_desktop->process_file_dialog_callbacks();
+	}
+#endif
+
 	wayland_thread.mutex.unlock();
 
 	Input::get_singleton()->flush_buffered_events();
@@ -1168,14 +1176,6 @@ void DisplayServerWayland::release_rendering_thread() {
 #ifdef GLES3_ENABLED
 	if (egl_manager) {
 		egl_manager->release_current();
-	}
-#endif
-}
-
-void DisplayServerWayland::make_rendering_thread() {
-#ifdef GLES3_ENABLED
-	if (egl_manager) {
-		egl_manager->make_current();
 	}
 #endif
 }

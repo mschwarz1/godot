@@ -174,6 +174,7 @@ private:
 		DRAG_SCALE_BOTH,
 		DRAG_ROTATE,
 		DRAG_PIVOT,
+		DRAG_TEMP_PIVOT,
 		DRAG_V_GUIDE,
 		DRAG_H_GUIDE,
 		DRAG_DOUBLE_GUIDE,
@@ -251,6 +252,7 @@ private:
 	bool key_scale = false;
 
 	bool pan_pressed = false;
+	Vector2 temp_pivot = Vector2(INFINITY, INFINITY);
 
 	bool ruler_tool_active = false;
 	Point2 ruler_tool_origin;
@@ -297,6 +299,7 @@ private:
 	};
 
 	HashMap<BoneKey, BoneList> bone_list;
+	MenuButton *skeleton_menu = nullptr;
 
 	struct PoseClipboard {
 		Vector2 pos;
@@ -329,7 +332,6 @@ private:
 	Button *group_button = nullptr;
 	Button *ungroup_button = nullptr;
 
-	MenuButton *skeleton_menu = nullptr;
 	Button *override_camera_button = nullptr;
 	MenuButton *view_menu = nullptr;
 	PopupMenu *grid_menu = nullptr;

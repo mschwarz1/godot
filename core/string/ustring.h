@@ -265,6 +265,9 @@ public:
 	signed char nocasecmp_to(const String &p_str) const;
 	signed char naturalcasecmp_to(const String &p_str) const;
 	signed char naturalnocasecmp_to(const String &p_str) const;
+	// Special sorting for file names. Names starting with `_` are put before all others except those starting with `.`, otherwise natural comparison is used.
+	signed char filecasecmp_to(const String &p_str) const;
+	signed char filenocasecmp_to(const String &p_str) const;
 
 	const char32_t *get_data() const;
 	/* standard size stuff */
@@ -390,7 +393,7 @@ public:
 	static String utf8(const char *p_utf8, int p_len = -1);
 
 	Char16String utf16() const;
-	Error parse_utf16(const char16_t *p_utf16, int p_len = -1);
+	Error parse_utf16(const char16_t *p_utf16, int p_len = -1, bool p_default_little_endian = true);
 	static String utf16(const char16_t *p_utf16, int p_len = -1);
 
 	static uint32_t hash(const char32_t *p_cstr, int p_len); /* hash the string */
@@ -496,6 +499,12 @@ struct NoCaseComparator {
 struct NaturalNoCaseComparator {
 	bool operator()(const String &p_a, const String &p_b) const {
 		return p_a.naturalnocasecmp_to(p_b) < 0;
+	}
+};
+
+struct FileNoCaseComparator {
+	bool operator()(const String &p_a, const String &p_b) const {
+		return p_a.filenocasecmp_to(p_b) < 0;
 	}
 };
 

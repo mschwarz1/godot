@@ -99,6 +99,7 @@ ConnectionInfoDialog::ConnectionInfoDialog() {
 	vbc->add_child(method);
 
 	tree = memnew(Tree);
+	tree->set_auto_translate_mode(AUTO_TRANSLATE_MODE_DISABLED);
 	tree->set_columns(3);
 	tree->set_hide_root(true);
 	tree->set_column_titles_visible(true);
@@ -411,6 +412,14 @@ Variant ScriptTextEditor::get_navigation_state() {
 	return code_editor->get_navigation_state();
 }
 
+Variant ScriptTextEditor::get_previous_state() {
+	return code_editor->get_previous_state();
+}
+
+void ScriptTextEditor::store_previous_state() {
+	return code_editor->store_previous_state();
+}
+
 void ScriptTextEditor::_convert_case(CodeTextEditor::CaseStyle p_case) {
 	code_editor->convert_case(p_case);
 }
@@ -598,8 +607,7 @@ void ScriptTextEditor::_update_warnings() {
 		warnings_panel->push_cell();
 		warnings_panel->push_meta(w.start_line - 1);
 		warnings_panel->push_color(warnings_panel->get_theme_color(SNAME("warning_color"), EditorStringName(Editor)));
-		warnings_panel->add_text(TTR("Line") + " " + itos(w.start_line));
-		warnings_panel->add_text(" (" + w.string_code + "):");
+		warnings_panel->add_text(vformat(TTR("Line %d (%s):"), w.start_line, w.string_code));
 		warnings_panel->pop(); // Color.
 		warnings_panel->pop(); // Meta goto.
 		warnings_panel->pop(); // Cell.
@@ -625,7 +633,7 @@ void ScriptTextEditor::_update_errors() {
 		errors_panel->push_cell();
 		errors_panel->push_meta(err.line - 1);
 		errors_panel->push_color(warnings_panel->get_theme_color(SNAME("error_color"), EditorStringName(Editor)));
-		errors_panel->add_text(TTR("Line") + " " + itos(err.line) + ":");
+		errors_panel->add_text(vformat(TTR("Line %d:"), err.line));
 		errors_panel->pop(); // Color.
 		errors_panel->pop(); // Meta goto.
 		errors_panel->pop(); // Cell.
@@ -659,7 +667,7 @@ void ScriptTextEditor::_update_errors() {
 			errors_panel->push_cell();
 			errors_panel->push_meta(click_meta);
 			errors_panel->push_color(errors_panel->get_theme_color(SNAME("error_color"), EditorStringName(Editor)));
-			errors_panel->add_text(TTR("Line") + " " + itos(err.line) + ":");
+			errors_panel->add_text(vformat(TTR("Line %d:"), err.line));
 			errors_panel->pop(); // Color.
 			errors_panel->pop(); // Meta goto.
 			errors_panel->pop(); // Cell.
@@ -902,6 +910,18 @@ void ScriptTextEditor::_breakpoint_item_pressed(int p_idx) {
 
 void ScriptTextEditor::_breakpoint_toggled(int p_row) {
 	EditorDebuggerNode::get_singleton()->set_breakpoint(script->get_path(), p_row + 1, code_editor->get_text_editor()->is_line_breakpointed(p_row));
+}
+
+void ScriptTextEditor::_on_caret_moved() {
+	int current_line = code_editor->get_text_editor()->get_caret_line();
+	if (ABS(current_line - previous_line) >= 10) {
+		Dictionary nav_state = get_navigation_state();
+		nav_state["row"] = previous_line;
+		nav_state["scroll_position"] = -1;
+		emit_signal(SNAME("request_save_previous_state"), nav_state);
+		store_previous_state();
+	}
+	previous_line = current_line;
 }
 
 void ScriptTextEditor::_lookup_symbol(const String &p_symbol, int p_row, int p_column) {
@@ -1164,9 +1184,17 @@ void ScriptTextEditor::_update_connected_methods() {
 	// Add override icons to methods.
 	methods_found.clear();
 	for (int i = 0; i < functions.size(); i++) {
-		StringName name = StringName(functions[i].get_slice(":", 0));
+		String raw_name = functions[i].get_slice(":", 0);
+		StringName name = StringName(raw_name);
 		if (methods_found.has(name)) {
 			continue;
+		}
+
+		// Account for inner classes by stripping the class names from the method,
+		// starting from the right since our inner class might be inside of another inner class.
+		int pos = raw_name.rfind(".");
+		if (pos != -1) {
+			name = raw_name.substr(pos + 1);
 		}
 
 		String found_base_class;
@@ -1217,7 +1245,7 @@ void ScriptTextEditor::_update_connected_methods() {
 				text_edit->set_line_gutter_icon(line, connection_gutter, get_parent_control()->get_editor_theme_icon(SNAME("MethodOverrideAndSlot")));
 			}
 
-			methods_found.insert(name);
+			methods_found.insert(StringName(raw_name));
 		}
 	}
 }
@@ -1336,12 +1364,12 @@ void ScriptTextEditor::_edit_option(int p_op) {
 			code_editor->get_text_editor()->duplicate_lines();
 		} break;
 		case EDIT_TOGGLE_FOLD_LINE: {
-			int previous_line = -1;
+			int prev_line = -1;
 			for (int caret_idx : tx->get_caret_index_edit_order()) {
 				int line_idx = tx->get_caret_line(caret_idx);
-				if (line_idx != previous_line) {
+				if (line_idx != prev_line) {
 					tx->toggle_foldable_line(line_idx);
-					previous_line = line_idx;
+					prev_line = line_idx;
 				}
 			}
 			tx->queue_redraw();
@@ -1946,9 +1974,12 @@ void ScriptTextEditor::drop_data_fw(const Point2 &p_point, const Variant &p_data
 
 	if (d.has("type") && String(d["type"]) == "obj_property") {
 		te->remove_secondary_carets();
+
+		bool add_literal = EDITOR_GET("text_editor/completion/add_node_path_literals");
+		String text_to_drop = add_literal ? "^" : "";
 		// It is unclear whether properties may contain single or double quotes.
 		// Assume here that double-quotes may not exist. We are escaping single-quotes if necessary.
-		const String text_to_drop = _quote_drop_data(String(d["property"]));
+		text_to_drop += _quote_drop_data(String(d["property"]));
 
 		te->set_caret_line(row);
 		te->set_caret_column(col);
@@ -2341,6 +2372,7 @@ ScriptTextEditor::ScriptTextEditor() {
 	code_editor->get_text_editor()->set_draw_breakpoints_gutter(true);
 	code_editor->get_text_editor()->set_draw_executing_lines_gutter(true);
 	code_editor->get_text_editor()->connect("breakpoint_toggled", callable_mp(this, &ScriptTextEditor::_breakpoint_toggled));
+	code_editor->get_text_editor()->connect("caret_changed", callable_mp(this, &ScriptTextEditor::_on_caret_moved));
 
 	connection_gutter = 1;
 	code_editor->get_text_editor()->add_gutter(connection_gutter);

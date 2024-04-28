@@ -165,7 +165,7 @@ private:
 	// Variant takes 20 bytes when real_t is float, and 36 if double
 	// it only allocates extra memory for aabb/matrix.
 
-	Type type = NIL;
+	Type type;
 
 	struct ObjData {
 		ObjectID id;
@@ -355,19 +355,14 @@ public:
 	const Variant &operator[](const Variant &p_key) const = delete;
 
 	operator bool() const;
-	operator signed int() const;
-	operator unsigned int() const; // this is the real one
-	operator signed short() const;
-	operator unsigned short() const;
-	operator signed char() const;
-	operator unsigned char() const;
-	//operator long unsigned int() const;
 	operator int64_t() const;
+	operator int32_t() const;
+	operator int16_t() const;
+	operator int8_t() const;
 	operator uint64_t() const;
-#ifdef NEED_LONG_INT
-	operator signed long() const;
-	operator unsigned long() const;
-#endif
+	operator uint32_t() const;
+	operator uint16_t() const;
+	operator uint8_t() const;
 
 	operator ObjectID() const;
 
@@ -430,18 +425,14 @@ public:
 	Object *get_validated_object_with_check(bool &r_previously_freed) const;
 
 	Variant(bool p_bool);
-	Variant(signed int p_int); // real one
-	Variant(unsigned int p_int);
-#ifdef NEED_LONG_INT
-	Variant(signed long p_long); // real one
-	Variant(unsigned long p_long);
-#endif
-	Variant(signed short p_short); // real one
-	Variant(unsigned short p_short);
-	Variant(signed char p_char); // real one
-	Variant(unsigned char p_char);
-	Variant(int64_t p_int); // real one
-	Variant(uint64_t p_int);
+	Variant(int64_t p_int64);
+	Variant(int32_t p_int32);
+	Variant(int16_t p_int16);
+	Variant(int8_t p_int8);
+	Variant(uint64_t p_uint64);
+	Variant(uint32_t p_uint32);
+	Variant(uint16_t p_uint16);
+	Variant(uint8_t p_uint8);
 	Variant(float p_float);
 	Variant(double p_double);
 	Variant(const ObjectID &p_id);
@@ -492,8 +483,8 @@ public:
 	Variant(const IPAddress &p_address);
 
 #define VARIANT_ENUM_CLASS_CONSTRUCTOR(m_enum) \
-	Variant(m_enum p_value) {                  \
-		type = INT;                            \
+	Variant(m_enum p_value) :                  \
+			type(INT) {                        \
 		_data._int = (int64_t)p_value;         \
 	}
 
@@ -797,7 +788,8 @@ public:
 	static void unregister_types();
 
 	Variant(const Variant &p_variant);
-	_FORCE_INLINE_ Variant() {}
+	_FORCE_INLINE_ Variant() :
+			type(NIL) {}
 	_FORCE_INLINE_ ~Variant() {
 		clear();
 	}
@@ -806,12 +798,23 @@ public:
 //typedef Dictionary Dictionary; no
 //typedef Array Array;
 
-Vector<Variant> varray();
-Vector<Variant> varray(const Variant &p_arg1);
-Vector<Variant> varray(const Variant &p_arg1, const Variant &p_arg2);
-Vector<Variant> varray(const Variant &p_arg1, const Variant &p_arg2, const Variant &p_arg3);
-Vector<Variant> varray(const Variant &p_arg1, const Variant &p_arg2, const Variant &p_arg3, const Variant &p_arg4);
-Vector<Variant> varray(const Variant &p_arg1, const Variant &p_arg2, const Variant &p_arg3, const Variant &p_arg4, const Variant &p_arg5);
+template <typename... VarArgs>
+Vector<Variant> varray(VarArgs... p_args) {
+	Vector<Variant> v;
+
+	Variant args[sizeof...(p_args) + 1] = { p_args..., Variant() }; // +1 makes sure zero sized arrays are also supported.
+	uint32_t argc = sizeof...(p_args);
+
+	if (argc > 0) {
+		v.resize(argc);
+		Variant *vw = v.ptrw();
+
+		for (uint32_t i = 0; i < argc; i++) {
+			vw[i] = args[i];
+		}
+	}
+	return v;
+}
 
 struct VariantHasher {
 	static _FORCE_INLINE_ uint32_t hash(const Variant &p_variant) { return p_variant.hash(); }
@@ -872,6 +875,58 @@ Callable Callable::bind(VarArgs... p_args) const {
 		argptrs[i] = &args[i];
 	}
 	return bindp(sizeof...(p_args) == 0 ? nullptr : (const Variant **)argptrs, sizeof...(p_args));
+}
+
+Variant &Array::Iterator::operator*() const {
+	if (unlikely(read_only)) {
+		*read_only = *element_ptr;
+		return *read_only;
+	}
+	return *element_ptr;
+}
+
+Variant *Array::Iterator::operator->() const {
+	if (unlikely(read_only)) {
+		*read_only = *element_ptr;
+		return read_only;
+	}
+	return element_ptr;
+}
+
+Array::Iterator &Array::Iterator::operator++() {
+	element_ptr++;
+	return *this;
+}
+
+Array::Iterator &Array::Iterator::operator--() {
+	element_ptr--;
+	return *this;
+}
+
+const Variant &Array::ConstIterator::operator*() const {
+	if (unlikely(read_only)) {
+		*read_only = *element_ptr;
+		return *read_only;
+	}
+	return *element_ptr;
+}
+
+const Variant *Array::ConstIterator::operator->() const {
+	if (unlikely(read_only)) {
+		*read_only = *element_ptr;
+		return read_only;
+	}
+	return element_ptr;
+}
+
+Array::ConstIterator &Array::ConstIterator::operator++() {
+	element_ptr++;
+	return *this;
+}
+
+Array::ConstIterator &Array::ConstIterator::operator--() {
+	element_ptr--;
+	return *this;
 }
 
 #endif // VARIANT_H

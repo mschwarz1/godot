@@ -167,6 +167,8 @@ void InputEvent::_bind_methods() {
 
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "device"), "set_device", "get_device");
 	//ADD_PROPERTY(PropertyInfo(Variant::BOOL, "handled"), "set_handled", "is_handled");
+
+	BIND_CONSTANT(DEVICE_ID_EMULATION);
 }
 
 ///////////////////////////////////

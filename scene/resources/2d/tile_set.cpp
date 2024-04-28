@@ -4650,7 +4650,7 @@ Ref<Texture2D> TileSetAtlasSource::get_texture() const {
 void TileSetAtlasSource::set_margins(Vector2i p_margins) {
 	if (p_margins.x < 0 || p_margins.y < 0) {
 		WARN_PRINT("Atlas source margins should be positive.");
-		margins = Vector2i(MAX(0, p_margins.x), MAX(0, p_margins.y));
+		margins = p_margins.max(Vector2i());
 	} else {
 		margins = p_margins;
 	}
@@ -4666,7 +4666,7 @@ Vector2i TileSetAtlasSource::get_margins() const {
 void TileSetAtlasSource::set_separation(Vector2i p_separation) {
 	if (p_separation.x < 0 || p_separation.y < 0) {
 		WARN_PRINT("Atlas source separation should be positive.");
-		separation = Vector2i(MAX(0, p_separation.x), MAX(0, p_separation.y));
+		separation = p_separation.max(Vector2i());
 	} else {
 		separation = p_separation;
 	}
@@ -4682,7 +4682,7 @@ Vector2i TileSetAtlasSource::get_separation() const {
 void TileSetAtlasSource::set_texture_region_size(Vector2i p_tile_size) {
 	if (p_tile_size.x <= 0 || p_tile_size.y <= 0) {
 		WARN_PRINT("Atlas source tile_size should be strictly positive.");
-		texture_region_size = Vector2i(MAX(1, p_tile_size.x), MAX(1, p_tile_size.y));
+		texture_region_size = p_tile_size.max(Vector2i(1, 1));
 	} else {
 		texture_region_size = p_tile_size;
 	}
@@ -5590,6 +5590,11 @@ Ref<ImageTexture> TileSetAtlasSource::_create_padded_image_texture(const Ref<Tex
 		Ref<ImageTexture> ret;
 		ret.instantiate();
 		return ret;
+	}
+	if (src_image->is_compressed()) {
+		src_image = src_image->duplicate();
+		Error err = src_image->decompress();
+		ERR_FAIL_COND_V_MSG(err != OK, Ref<ImageTexture>(), "Unable to decompress image.");
 	}
 
 	Size2 size = get_atlas_grid_size() * (texture_region_size + Vector2i(2, 2));
@@ -6805,8 +6810,20 @@ void TileData::_get_property_list(List<PropertyInfo> *p_list) const {
 		// Physics layers.
 		p_list->push_back(PropertyInfo(Variant::NIL, GNAME("Physics", ""), PROPERTY_HINT_NONE, "", PROPERTY_USAGE_GROUP));
 		for (int i = 0; i < physics.size(); i++) {
-			p_list->push_back(PropertyInfo(Variant::VECTOR2, vformat("physics_layer_%d/%s", i, PNAME("linear_velocity")), PROPERTY_HINT_NONE));
-			p_list->push_back(PropertyInfo(Variant::FLOAT, vformat("physics_layer_%d/%s", i, PNAME("angular_velocity")), PROPERTY_HINT_NONE));
+			// physics_layer_%d/linear_velocity
+			property_info = PropertyInfo(Variant::VECTOR2, vformat("physics_layer_%d/%s", i, PNAME("linear_velocity")), PROPERTY_HINT_NONE);
+			if (physics[i].linear_velocity == Vector2()) {
+				property_info.usage ^= PROPERTY_USAGE_STORAGE;
+			}
+			p_list->push_back(property_info);
+
+			// physics_layer_%d/angular_velocity
+			property_info = PropertyInfo(Variant::FLOAT, vformat("physics_layer_%d/%s", i, PNAME("angular_velocity")), PROPERTY_HINT_NONE);
+			if (physics[i].angular_velocity == 0.0) {
+				property_info.usage ^= PROPERTY_USAGE_STORAGE;
+			}
+			p_list->push_back(property_info);
+
 			p_list->push_back(PropertyInfo(Variant::INT, vformat("physics_layer_%d/%s", i, PNAME("polygons_count")), PROPERTY_HINT_NONE, "", PROPERTY_USAGE_EDITOR));
 
 			for (int j = 0; j < physics[i].polygons.size(); j++) {
@@ -6918,6 +6935,7 @@ void TileData::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_terrain"), &TileData::get_terrain);
 	ClassDB::bind_method(D_METHOD("set_terrain_peering_bit", "peering_bit", "terrain"), &TileData::set_terrain_peering_bit);
 	ClassDB::bind_method(D_METHOD("get_terrain_peering_bit", "peering_bit"), &TileData::get_terrain_peering_bit);
+	ClassDB::bind_method(D_METHOD("is_valid_terrain_peering_bit", "peering_bit"), &TileData::is_valid_terrain_peering_bit);
 
 	// Navigation
 	ClassDB::bind_method(D_METHOD("set_navigation_polygon", "layer_id", "navigation_polygon"), &TileData::set_navigation_polygon);

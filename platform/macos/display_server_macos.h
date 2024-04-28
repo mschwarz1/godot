@@ -241,6 +241,8 @@ public:
 	NSImage *_convert_to_nsimg(Ref<Image> &p_image) const;
 	Point2i _get_screens_origin() const;
 
+	void set_menu_delegate(NSMenu *p_menu);
+
 	void send_event(NSEvent *p_event);
 	void send_window_event(const WindowData &p_wd, WindowEvent p_event);
 	void release_pressed_events();
@@ -424,7 +426,6 @@ public:
 	virtual void force_process_and_drop_events() override;
 
 	virtual void release_rendering_thread() override;
-	virtual void make_rendering_thread() override;
 	virtual void swap_buffers() override;
 
 	virtual void set_native_icon(const String &p_filename) override;

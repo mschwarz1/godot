@@ -69,11 +69,11 @@ for f in sys.argv[1:]:
     # In a second pass, we skip all consecutive comment lines starting with "/*",
     # then we can append the rest (step 2).
 
-    with open(fname.strip(), "r") as fileread:
+    with open(fname.strip(), "r", encoding="utf-8") as fileread:
         line = fileread.readline()
         header_done = False
 
-        while line.strip() == "":  # Skip empty lines at the top
+        while line.strip() == "" and line != "":  # Skip empty lines at the top
             line = fileread.readline()
 
         if line.find("/**********") == -1:  # Godot header starts this way
