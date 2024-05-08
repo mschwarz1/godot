@@ -141,7 +141,7 @@ struct NamesCache {
 	StringName vector3_type = StaticCString::create("Vector3");
 
 	// Object not included as it must be checked for all derived classes
-	static constexpr int nullable_types_count = 17;
+	static constexpr int nullable_types_count = 18;
 	StringName nullable_types[nullable_types_count] = {
 		string_type,
 		string_name_type,
@@ -161,6 +161,7 @@ struct NamesCache {
 		StaticCString::create(_STR(PackedVector2Array)),
 		StaticCString::create(_STR(PackedVector3Array)),
 		StaticCString::create(_STR(PackedColorArray)),
+		StaticCString::create(_STR(PackedVector4Array)),
 	};
 
 	bool is_nullable_type(const StringName &p_type) const {
@@ -258,6 +259,7 @@ bool arg_default_value_is_assignable_to_type(const Context &p_context, const Var
 		case Variant::PACKED_VECTOR2_ARRAY:
 		case Variant::PACKED_VECTOR3_ARRAY:
 		case Variant::PACKED_COLOR_ARRAY:
+		case Variant::PACKED_VECTOR4_ARRAY:
 		case Variant::CALLABLE:
 		case Variant::SIGNAL:
 			return p_arg_type.name == Variant::get_type_name(p_val.get_type());
@@ -548,8 +550,6 @@ void add_exposed_classes(Context &r_context) {
 		for (const MethodInfo &E : method_list) {
 			const MethodInfo &method_info = E;
 
-			int argc = method_info.arguments.size();
-
 			if (method_info.name.is_empty()) {
 				continue;
 			}
@@ -611,8 +611,9 @@ void add_exposed_classes(Context &r_context) {
 				method.return_type.name = Variant::get_type_name(return_info.type);
 			}
 
-			for (int i = 0; i < argc; i++) {
-				PropertyInfo arg_info = method_info.arguments[i];
+			int i = 0;
+			for (List<PropertyInfo>::ConstIterator itr = method_info.arguments.begin(); itr != method_info.arguments.end(); ++itr, ++i) {
+				const PropertyInfo &arg_info = *itr;
 
 				String orig_arg_name = arg_info.name;
 
@@ -684,10 +685,9 @@ void add_exposed_classes(Context &r_context) {
 			TEST_FAIL_COND(!String(signal.name).is_valid_identifier(),
 					"Signal name is not a valid identifier: '", exposed_class.name, ".", signal.name, "'.");
 
-			int argc = method_info.arguments.size();
-
-			for (int i = 0; i < argc; i++) {
-				PropertyInfo arg_info = method_info.arguments[i];
+			int i = 0;
+			for (List<PropertyInfo>::ConstIterator itr = method_info.arguments.begin(); itr != method_info.arguments.end(); ++itr, ++i) {
+				const PropertyInfo &arg_info = *itr;
 
 				String orig_arg_name = arg_info.name;
 

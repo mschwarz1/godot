@@ -138,7 +138,7 @@ public:
 		return nullptr;
 	}
 
-	static void placeholder_instance_free_property_list(GDExtensionClassInstancePtr p_instance, const GDExtensionPropertyInfo *p_list) {
+	static void placeholder_instance_free_property_list(GDExtensionClassInstancePtr p_instance, const GDExtensionPropertyInfo *p_list, uint32_t p_count) {
 	}
 
 	static GDExtensionBool placeholder_instance_property_can_revert(GDExtensionClassInstancePtr p_instance, GDExtensionConstStringNamePtr p_name) {
@@ -425,8 +425,8 @@ uint32_t ClassDB::get_api_hash(APIType p_api) {
 			for (const StringName &F : snames) {
 				MethodInfo &mi = t->signal_map[F];
 				hash = hash_murmur3_one_64(F.hash(), hash);
-				for (int i = 0; i < mi.arguments.size(); i++) {
-					hash = hash_murmur3_one_64(mi.arguments[i].type, hash);
+				for (const PropertyInfo &pi : mi.arguments) {
+					hash = hash_murmur3_one_64(pi.type, hash);
 				}
 			}
 		}
@@ -600,12 +600,13 @@ ObjectGDExtension *ClassDB::get_placeholder_extension(const StringName &p_class)
 	placeholder_extension->set = &PlaceholderExtensionInstance::placeholder_instance_set;
 	placeholder_extension->get = &PlaceholderExtensionInstance::placeholder_instance_get;
 	placeholder_extension->get_property_list = &PlaceholderExtensionInstance::placeholder_instance_get_property_list;
-	placeholder_extension->free_property_list = &PlaceholderExtensionInstance::placeholder_instance_free_property_list;
+	placeholder_extension->free_property_list2 = &PlaceholderExtensionInstance::placeholder_instance_free_property_list;
 	placeholder_extension->property_can_revert = &PlaceholderExtensionInstance::placeholder_instance_property_can_revert;
 	placeholder_extension->property_get_revert = &PlaceholderExtensionInstance::placeholder_instance_property_get_revert;
 	placeholder_extension->validate_property = &PlaceholderExtensionInstance::placeholder_instance_validate_property;
 #ifndef DISABLE_DEPRECATED
 	placeholder_extension->notification = nullptr;
+	placeholder_extension->free_property_list = nullptr;
 #endif // DISABLE_DEPRECATED
 	placeholder_extension->notification2 = &PlaceholderExtensionInstance::placeholder_instance_notification;
 	placeholder_extension->to_string = &PlaceholderExtensionInstance::placeholder_instance_to_string;
@@ -1855,8 +1856,9 @@ void ClassDB::add_virtual_method(const StringName &p_class, const MethodInfo &p_
 		if (p_arg_names.size() != mi.arguments.size()) {
 			WARN_PRINT("Mismatch argument name count for virtual method: " + String(p_class) + "::" + p_method.name);
 		} else {
-			for (int i = 0; i < p_arg_names.size(); i++) {
-				mi.arguments[i].name = p_arg_names[i];
+			List<PropertyInfo>::Iterator itr = mi.arguments.begin();
+			for (int i = 0; i < p_arg_names.size(); ++itr, ++i) {
+				itr->name = p_arg_names[i];
 			}
 		}
 	}

@@ -503,9 +503,14 @@ void Object::get_property_list(List<PropertyInfo> *p_list, bool p_reversed) cons
 					for (uint32_t i = 0; i < pcount; i++) {
 						p_list->push_back(PropertyInfo(pinfo[i]));
 					}
-					if (current_extension->free_property_list) {
+					if (current_extension->free_property_list2) {
+						current_extension->free_property_list2(_extension_instance, pinfo, pcount);
+					}
+#ifndef DISABLE_DEPRECATED
+					else if (current_extension->free_property_list) {
 						current_extension->free_property_list(_extension_instance, pinfo);
 					}
+#endif // DISABLE_DEPRECATED
 #ifdef TOOLS_ENABLED
 				}
 #endif
@@ -1297,9 +1302,8 @@ TypedArray<Dictionary> Object::_get_signal_connection_list(const StringName &p_s
 
 TypedArray<Dictionary> Object::_get_incoming_connections() const {
 	TypedArray<Dictionary> ret;
-	int connections_amount = connections.size();
-	for (int idx_conn = 0; idx_conn < connections_amount; idx_conn++) {
-		ret.push_back(connections[idx_conn]);
+	for (const Object::Connection &connection : connections) {
+		ret.push_back(connection);
 	}
 
 	return ret;
@@ -1455,7 +1459,7 @@ Error Object::connect(const StringName &p_signal, const Callable &p_callable, ui
 }
 
 bool Object::is_connected(const StringName &p_signal, const Callable &p_callable) const {
-	ERR_FAIL_COND_V_MSG(p_callable.is_null(), false, "Cannot determine if connected to '" + p_signal + "': the provided callable is null.");
+	ERR_FAIL_COND_V_MSG(p_callable.is_null(), false, "Cannot determine if connected to '" + p_signal + "': the provided callable is null."); // Should use `is_null`, see note in `connect` about the use of `is_valid`.
 	const SignalData *s = signal_map.getptr(p_signal);
 	if (!s) {
 		bool signal_is_valid = ClassDB::has_signal(get_class_name(), p_signal);
@@ -1478,7 +1482,7 @@ void Object::disconnect(const StringName &p_signal, const Callable &p_callable) 
 }
 
 bool Object::_disconnect(const StringName &p_signal, const Callable &p_callable, bool p_force) {
-	ERR_FAIL_COND_V_MSG(p_callable.is_null(), false, "Cannot disconnect from '" + p_signal + "': the provided callable is null.");
+	ERR_FAIL_COND_V_MSG(p_callable.is_null(), false, "Cannot disconnect from '" + p_signal + "': the provided callable is null."); // Should use `is_null`, see note in `connect` about the use of `is_valid`.
 
 	SignalData *s = signal_map.getptr(p_signal);
 	if (!s) {
