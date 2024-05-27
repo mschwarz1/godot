@@ -4,17 +4,16 @@
 
 import argparse
 import os
-import platform
 import re
 import sys
 import xml.etree.ElementTree as ET
 from collections import OrderedDict
-from typing import List, Dict, TextIO, Tuple, Optional, Any, Union
+from typing import Any, Dict, List, Optional, TextIO, Tuple, Union
 
 # Import hardcoded version information from version.py
 root_directory = os.path.join(os.path.dirname(os.path.abspath(__file__)), "../../")
 sys.path.append(root_directory)  # Include the root directory
-import version
+import version  # noqa: E402
 
 # $DOCS_URL/path/to/page.html(#fragment-tag)
 GODOT_DOCS_PATTERN = re.compile(r"^\$DOCS_URL/(.*)\.html(#.*)?$")
@@ -677,17 +676,6 @@ class ScriptLanguageParityCheck:
 
 # Entry point for the RST generator.
 def main() -> None:
-    # Enable ANSI escape code support on Windows 10 and later (for colored console output).
-    # <https://bugs.python.org/issue29059>
-    if platform.system().lower() == "windows":
-        from ctypes import windll, c_int, byref  # type: ignore
-
-        stdout_handle = windll.kernel32.GetStdHandle(c_int(-11))
-        mode = c_int(0)
-        windll.kernel32.GetConsoleMode(c_int(stdout_handle), byref(mode))
-        mode = c_int(mode.value | 4)
-        windll.kernel32.SetConsoleMode(c_int(stdout_handle), mode)
-
     parser = argparse.ArgumentParser()
     parser.add_argument("path", nargs="+", help="A path to an XML file or a directory containing XML files to parse.")
     parser.add_argument("--filter", default="", help="The filepath pattern for XML files to filter.")
@@ -711,7 +699,25 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    should_color = args.color or (hasattr(sys.stdout, "isatty") and sys.stdout.isatty())
+    should_color = bool(args.color or sys.stdout.isatty() or os.environ.get("CI"))
+
+    # Enable ANSI escape code support on Windows 10 and later (for colored console output).
+    # <https://github.com/python/cpython/issues/73245>
+    if should_color and sys.stdout.isatty() and sys.platform == "win32":
+        try:
+            from ctypes import WinError, byref, windll  # type: ignore
+            from ctypes.wintypes import DWORD  # type: ignore
+
+            stdout_handle = windll.kernel32.GetStdHandle(DWORD(-11))
+            mode = DWORD(0)
+            if not windll.kernel32.GetConsoleMode(stdout_handle, byref(mode)):
+                raise WinError()
+            mode = DWORD(mode.value | 4)
+            if not windll.kernel32.SetConsoleMode(stdout_handle, mode):
+                raise WinError()
+        except Exception:
+            should_color = False
+
     STYLES["red"] = "\x1b[91m" if should_color else ""
     STYLES["green"] = "\x1b[92m" if should_color else ""
     STYLES["yellow"] = "\x1b[93m" if should_color else ""
@@ -1406,7 +1412,7 @@ def make_rst_class(class_def: ClassDef, state: State, dry_run: bool, output_dir:
                     operator_anchor = f".. _class_{class_name}_operator_{sanitize_operator_name(m.name, state)}"
                     for parameter in m.parameters:
                         operator_anchor += f"_{parameter.type_name.type_name}"
-                    operator_anchor += f":\n\n"
+                    operator_anchor += ":\n\n"
                     f.write(operator_anchor)
 
                     f.write(".. rst-class:: classref-operator\n\n")
@@ -1546,7 +1552,7 @@ def make_method_signature(
             out += f":ref:`{op_name}<class_{class_def.name}_{ref_type}_{sanitize_operator_name(definition.name, state)}"
             for parameter in definition.parameters:
                 out += f"_{parameter.type_name.type_name}"
-            out += f">`"
+            out += ">`"
         elif ref_type == "method":
             ref_type_qualifier = ""
             if definition.name.startswith("_"):

@@ -190,7 +190,7 @@ void PropertySelector::_update_search() {
 				continue;
 			}
 
-			if (!search_box->get_text().is_empty() && E.name.findn(search_text) == -1) {
+			if (!search_box->get_text().is_empty() && !E.name.containsn(search_text)) {
 				continue;
 			}
 
@@ -203,7 +203,7 @@ void PropertySelector::_update_search() {
 			item->set_metadata(0, E.name);
 			item->set_icon(0, type_icons[E.type]);
 
-			if (!found && !search_box->get_text().is_empty() && E.name.findn(search_text) != -1) {
+			if (!found && !search_box->get_text().is_empty() && E.name.containsn(search_text)) {
 				item->select(0);
 				found = true;
 			}
@@ -281,7 +281,7 @@ void PropertySelector::_update_search() {
 				continue;
 			}
 
-			if (!search_box->get_text().is_empty() && name.findn(search_text) == -1) {
+			if (!search_box->get_text().is_empty() && !name.containsn(search_text)) {
 				continue;
 			}
 
@@ -330,7 +330,7 @@ void PropertySelector::_update_search() {
 			item->set_metadata(0, name);
 			item->set_selectable(0, true);
 
-			if (!found && !search_box->get_text().is_empty() && name.findn(search_text) != -1) {
+			if (!found && !search_box->get_text().is_empty() && name.containsn(search_text)) {
 				item->select(0);
 				found = true;
 			}
@@ -552,7 +552,7 @@ PropertySelector::PropertySelector() {
 	search_box = memnew(LineEdit);
 	vbc->add_margin_child(TTR("Search:"), search_box);
 	search_box->connect("text_changed", callable_mp(this, &PropertySelector::_text_changed));
-	search_box->connect("gui_input", callable_mp(this, &PropertySelector::_sbox_input));
+	search_box->connect(SceneStringName(gui_input), callable_mp(this, &PropertySelector::_sbox_input));
 	search_options = memnew(Tree);
 	search_options->set_auto_translate_mode(AUTO_TRANSLATE_MODE_DISABLED);
 	vbc->add_margin_child(TTR("Matches:"), search_options, true);

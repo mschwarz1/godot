@@ -797,6 +797,8 @@ private:
 #endif
 
 public:
+	RenderingContextDriver *get_context_driver() const { return context; }
+
 	const RDD::Capabilities &get_device_capabilities() const { return driver->get_capabilities(); }
 
 	bool has_feature(const Features p_feature) const;
@@ -1261,6 +1263,9 @@ private:
 		// Swap chains prepared for drawing during the frame that must be presented.
 		LocalVector<RDD::SwapChainID> swap_chains_to_present;
 
+		// Extra command buffer pool used for driver workarounds.
+		RDG::CommandBufferPool command_buffer_pool;
+
 		struct Timestamp {
 			String description;
 			uint64_t value = 0;
@@ -1354,6 +1359,8 @@ public:
 	String get_device_api_name() const;
 	String get_device_api_version() const;
 	String get_device_pipeline_cache_uuid() const;
+
+	bool is_composite_alpha_supported() const;
 
 	uint64_t get_driver_resource(DriverResource p_resource, RID p_rid = RID(), uint64_t p_index = 0);
 
