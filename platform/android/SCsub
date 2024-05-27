@@ -80,7 +80,7 @@ if lib_arch_dir != "":
     stl_lib_path = (
         #str(env["ANDROID_NDK_ROOT"]) + "/sources/cxx-stl/llvm-libc++/libs/" + lib_arch_dir + "/libc++_shared.so"
         #"C:\\Users\\Michael\\AppData\\Local\\Android\\Sdk/ndk/23.2.8568313" + "sources/cxx-stl/llvm-libc++/libs/" + lib_arch_dir + "/libc++_shared.so"
-        "G:\\WorkAround\\libc++_shared.so"
+        "G:\\WorkAround\\" + lib_arch_dir + "\\libc++_shared.so"
     )
 
     env_android.Command(out_dir + "/libc++_shared.so", stl_lib_path, Copy("$TARGET", "$SOURCE"))
