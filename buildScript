@@ -1,11 +1,18 @@
 set -e
 
+
+precision="double"
+if [[ -n "${PRECISION}" ]] ; then
+    precision="${PRECISION}"    
+fi
+
+
 working_dir=$(pwd)
 
-scons platform=windows module_mono_enabled=yes arch=x86_64 precision=double dev_build=yes use_mingw=yes separate_debug_symbols=yes -j8
-bin/godot.windows.editor.dev.double.x86_64.mono.exe --generate-mono-glue modules/mono/glue --precision=double
-python ./modules/mono/build_scripts/build_assemblies.py --godot-output-dir ./bin --push-nupkgs-local "../GodotNugetSourceData" --precision=double
-scons module_mono_enabled=yes arch=x86_64 precision=double dev_build=yes use_mingw=yes separate_debug_symbols=yes -j8
+scons platform=windows module_mono_enabled=yes arch=x86_64 precision="${precision}" dev_build=yes use_mingw=yes separate_debug_symbols=yes -j8
+bin/godot.windows.editor.dev.double.x86_64.mono.exe --generate-mono-glue modules/mono/glue --precision="${precision}"
+python ./modules/mono/build_scripts/build_assemblies.py --godot-output-dir ./bin --push-nupkgs-local "../GodotNugetSourceData" --precision="${precision}"
+scons module_mono_enabled=yes arch=x86_64 precision="${precision}" dev_build=yes use_mingw=yes separate_debug_symbols=yes -j8
 
 # Copy nuget data to common place so it can use build templates 
 cp -r ../GodotNugetSourceData   ${APPDATA}/NuGet/GodotNugetSource
@@ -16,19 +23,19 @@ if [[ -n "${TEMPLATES}" ]] ; then
     echo "Building templates!!"
     echo ""
     sleep 1
-    scons target=template_release tools=no arch=x86_64 module_mono_enabled=yes precision=double use_mingw=yes separate_debug_symbols=yes -j8
-    scons target=template_debug tools=no arch=x86_64 module_mono_enabled=yes precision=double use_mingw=yes separate_debug_symbols=yes -j8
+    scons target=template_release tools=no arch=x86_64 module_mono_enabled=yes precision="${precision}" use_mingw=yes separate_debug_symbols=yes -j8
+    scons target=template_debug tools=no arch=x86_64 module_mono_enabled=yes precision="${precision}" use_mingw=yes separate_debug_symbols=yes -j8
 
     # Android export templates
-    scons platform=android target=template_release arch=arm32 tools=no module_mono_enabled=yes precision=double use_mingw=yes separate_debug_symbols=yes -j8
-    scons platform=android target=template_release arch=arm64 tools=no module_mono_enabled=yes precision=double use_mingw=yes separate_debug_symbols=yes -j8
+    scons platform=android target=template_release arch=arm32 tools=no module_mono_enabled=yes precision="${precision}" use_mingw=yes separate_debug_symbols=yes -j8
+    scons platform=android target=template_release arch=arm64 tools=no module_mono_enabled=yes precision="${precision}" use_mingw=yes separate_debug_symbols=yes -j8
     cd platform/android/java
     # On Windows
     ./gradlew generateGodotTemplates
     cd $working_dir
 
-    scons platform=android target=template_debug arch=arm32 tools=no module_mono_enabled=yes precision=double use_mingw=yes separate_debug_symbols=yes -j8
-    scons platform=android target=template_debug arch=arm64 tools=no module_mono_enabled=yes precision=double use_mingw=yes separate_debug_symbols=yes -j8
+    scons platform=android target=template_debug arch=arm32 tools=no module_mono_enabled=yes precision="${precision}" use_mingw=yes separate_debug_symbols=yes -j8
+    scons platform=android target=template_debug arch=arm64 tools=no module_mono_enabled=yes precision="${precision}" use_mingw=yes separate_debug_symbols=yes -j8
     cd platform/android/java
     # On Windows
     ./gradlew generateGodotTemplates
