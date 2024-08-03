@@ -10,7 +10,13 @@ fi
 working_dir=$(pwd)
 
 scons platform=windows module_mono_enabled=yes arch=x86_64 precision="${precision}" dev_build=yes use_mingw=yes separate_debug_symbols=yes -j8
-bin/godot.windows.editor.dev.double.x86_64.mono.exe --generate-mono-glue modules/mono/glue --precision="${precision}"
+
+if [ "$precision" = "double" ]; then
+    bin/godot.windows.editor.dev.double.x86_64.mono.exe --generate-mono-glue modules/mono/glue --precision="${precision}"
+else
+    bin/godot.windows.editor.dev.x86_64.mono.exe --generate-mono-glue modules/mono/glue --precision="${precision}"
+fi
+
 python ./modules/mono/build_scripts/build_assemblies.py --godot-output-dir ./bin --push-nupkgs-local "../GodotNugetSourceData" --precision="${precision}"
 scons module_mono_enabled=yes arch=x86_64 precision="${precision}" dev_build=yes use_mingw=yes separate_debug_symbols=yes -j8
 
