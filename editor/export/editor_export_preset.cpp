@@ -136,8 +136,29 @@ String EditorExportPreset::_get_property_warning(const StringName &p_name) const
 
 void EditorExportPreset::_get_property_list(List<PropertyInfo> *p_list) const {
 	for (const KeyValue<StringName, PropertyInfo> &E : properties) {
-		if (!value_overrides.has(E.key) && platform->get_export_option_visibility(this, E.key)) {
-			p_list->push_back(E.value);
+		if (!value_overrides.has(E.key)) {
+			bool property_visible = platform->get_export_option_visibility(this, E.key);
+			if (!property_visible) {
+				continue;
+			}
+
+			// Get option visibility from editor export plugins.
+			Vector<Ref<EditorExportPlugin>> export_plugins = EditorExport::get_singleton()->get_export_plugins();
+			for (int i = 0; i < export_plugins.size(); i++) {
+				if (!export_plugins[i]->supports_platform(platform)) {
+					continue;
+				}
+
+				export_plugins.write[i]->set_export_preset(Ref<EditorExportPreset>(this));
+				property_visible = export_plugins[i]->_get_export_option_visibility(platform, E.key);
+				if (!property_visible) {
+					break;
+				}
+			}
+
+			if (property_visible) {
+				p_list->push_back(E.value);
+			}
 		}
 	}
 }
@@ -428,6 +449,15 @@ void EditorExportPreset::set_enc_ex_filter(const String &p_filter) {
 
 String EditorExportPreset::get_enc_ex_filter() const {
 	return enc_ex_filters;
+}
+
+void EditorExportPreset::set_seed(uint64_t p_seed) {
+	seed = p_seed;
+	EditorExport::singleton->save_presets();
+}
+
+uint64_t EditorExportPreset::get_seed() const {
+	return seed;
 }
 
 void EditorExportPreset::set_enc_pck(bool p_enabled) {

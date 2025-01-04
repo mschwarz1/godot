@@ -31,12 +31,7 @@
 #include "editor_export_plugin.h"
 
 #include "core/config/project_settings.h"
-#include "core/io/dir_access.h"
-#include "core/io/file_access.h"
-#include "editor/editor_paths.h"
-#include "editor/editor_settings.h"
 #include "editor/export/editor_export_platform.h"
-#include "scene/resources/resource_format_text.h"
 
 void EditorExportPlugin::set_export_preset(const Ref<EditorExportPreset> &p_preset) {
 	if (p_preset.is_valid()) {
@@ -295,6 +290,12 @@ bool EditorExportPlugin::_should_update_export_options(const Ref<EditorExportPla
 	return ret;
 }
 
+bool EditorExportPlugin::_get_export_option_visibility(const Ref<EditorExportPlatform> &p_export_platform, const String &p_option_name) const {
+	bool ret = true;
+	GDVIRTUAL_CALL(_get_export_option_visibility, p_export_platform, p_option_name, ret);
+	return ret;
+}
+
 String EditorExportPlugin::_get_export_option_warning(const Ref<EditorExportPlatform> &p_export_platform, const String &p_option_name) const {
 	String ret;
 	GDVIRTUAL_CALL(_get_export_option_warning, p_export_platform, p_option_name, ret);
@@ -354,6 +355,7 @@ void EditorExportPlugin::_bind_methods() {
 	GDVIRTUAL_BIND(_get_export_options, "platform");
 	GDVIRTUAL_BIND(_get_export_options_overrides, "platform");
 	GDVIRTUAL_BIND(_should_update_export_options, "platform");
+	GDVIRTUAL_BIND(_get_export_option_visibility, "platform", "option");
 	GDVIRTUAL_BIND(_get_export_option_warning, "platform", "option");
 
 	GDVIRTUAL_BIND(_get_export_features, "platform", "debug");

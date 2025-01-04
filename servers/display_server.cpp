@@ -550,7 +550,7 @@ DisplayServer::ScreenOrientation DisplayServer::screen_get_orientation(int p_scr
 
 float DisplayServer::screen_get_scale(int p_screen) const {
 	return 1.0f;
-};
+}
 
 bool DisplayServer::is_touchscreen_available() const {
 	return Input::get_singleton() && Input::get_singleton()->is_emulating_touch_from_mouse();
@@ -634,6 +634,10 @@ int DisplayServer::virtual_keyboard_get_height() const {
 	ERR_FAIL_V_MSG(0, "Virtual keyboard not supported by this display server.");
 }
 
+bool DisplayServer::has_hardware_keyboard() const {
+	return true;
+}
+
 void DisplayServer::cursor_set_shape(CursorShape p_shape) {
 	WARN_PRINT("Cursor shape not supported by this display server.");
 }
@@ -651,6 +655,21 @@ bool DisplayServer::get_swap_cancel_ok() {
 }
 
 void DisplayServer::enable_for_stealing_focus(OS::ProcessID pid) {
+}
+
+Error DisplayServer::embed_process(WindowID p_window, OS::ProcessID p_pid, const Rect2i &p_rect, bool p_visible, bool p_grab_focus) {
+	WARN_PRINT("Embedded process not supported by this display server.");
+	return ERR_UNAVAILABLE;
+}
+
+Error DisplayServer::remove_embedded_process(OS::ProcessID p_pid) {
+	WARN_PRINT("Embedded process not supported by this display server.");
+	return ERR_UNAVAILABLE;
+}
+
+OS::ProcessID DisplayServer::get_focused_process_id() {
+	WARN_PRINT("Embedded process not supported by this display server.");
+	return 0;
 }
 
 Error DisplayServer::dialog_show(String p_title, String p_description, Vector<String> p_buttons, const Callable &p_callback) {
@@ -671,6 +690,9 @@ Error DisplayServer::file_dialog_show(const String &p_title, const String &p_cur
 Error DisplayServer::file_dialog_with_options_show(const String &p_title, const String &p_current_directory, const String &p_root, const String &p_filename, bool p_show_hidden, FileDialogMode p_mode, const Vector<String> &p_filters, const TypedArray<Dictionary> &p_options, const Callable &p_callback) {
 	WARN_PRINT("Native dialogs not supported by this display server.");
 	return ERR_UNAVAILABLE;
+}
+
+void DisplayServer::beep() const {
 }
 
 int DisplayServer::keyboard_get_layout_count() const {
@@ -896,6 +918,7 @@ void DisplayServer::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("screen_get_refresh_rate", "screen"), &DisplayServer::screen_get_refresh_rate, DEFVAL(SCREEN_OF_MAIN_WINDOW));
 	ClassDB::bind_method(D_METHOD("screen_get_pixel", "position"), &DisplayServer::screen_get_pixel);
 	ClassDB::bind_method(D_METHOD("screen_get_image", "screen"), &DisplayServer::screen_get_image, DEFVAL(SCREEN_OF_MAIN_WINDOW));
+	ClassDB::bind_method(D_METHOD("screen_get_image_rect", "rect"), &DisplayServer::screen_get_image_rect);
 
 	ClassDB::bind_method(D_METHOD("screen_set_orientation", "orientation", "screen"), &DisplayServer::screen_set_orientation, DEFVAL(SCREEN_OF_MAIN_WINDOW));
 	ClassDB::bind_method(D_METHOD("screen_get_orientation", "screen"), &DisplayServer::screen_get_orientation, DEFVAL(SCREEN_OF_MAIN_WINDOW));
@@ -968,6 +991,8 @@ void DisplayServer::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("window_maximize_on_title_dbl_click"), &DisplayServer::window_maximize_on_title_dbl_click);
 	ClassDB::bind_method(D_METHOD("window_minimize_on_title_dbl_click"), &DisplayServer::window_minimize_on_title_dbl_click);
 
+	ClassDB::bind_method(D_METHOD("window_start_drag", "window_id"), &DisplayServer::window_start_drag, DEFVAL(MAIN_WINDOW_ID));
+
 	ClassDB::bind_method(D_METHOD("ime_get_selection"), &DisplayServer::ime_get_selection);
 	ClassDB::bind_method(D_METHOD("ime_get_text"), &DisplayServer::ime_get_text);
 
@@ -975,6 +1000,8 @@ void DisplayServer::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("virtual_keyboard_hide"), &DisplayServer::virtual_keyboard_hide);
 
 	ClassDB::bind_method(D_METHOD("virtual_keyboard_get_height"), &DisplayServer::virtual_keyboard_get_height);
+
+	ClassDB::bind_method(D_METHOD("has_hardware_keyboard"), &DisplayServer::has_hardware_keyboard);
 
 	ClassDB::bind_method(D_METHOD("cursor_set_shape", "shape"), &DisplayServer::cursor_set_shape);
 	ClassDB::bind_method(D_METHOD("cursor_get_shape"), &DisplayServer::cursor_get_shape);
@@ -989,6 +1016,8 @@ void DisplayServer::_bind_methods() {
 
 	ClassDB::bind_method(D_METHOD("file_dialog_show", "title", "current_directory", "filename", "show_hidden", "mode", "filters", "callback"), &DisplayServer::file_dialog_show);
 	ClassDB::bind_method(D_METHOD("file_dialog_with_options_show", "title", "current_directory", "root", "filename", "show_hidden", "mode", "filters", "options", "callback"), &DisplayServer::file_dialog_with_options_show);
+
+	ClassDB::bind_method(D_METHOD("beep"), &DisplayServer::beep);
 
 	ClassDB::bind_method(D_METHOD("keyboard_get_layout_count"), &DisplayServer::keyboard_get_layout_count);
 	ClassDB::bind_method(D_METHOD("keyboard_get_current_layout"), &DisplayServer::keyboard_get_current_layout);
@@ -1050,6 +1079,10 @@ void DisplayServer::_bind_methods() {
 	BIND_ENUM_CONSTANT(FEATURE_NATIVE_HELP);
 	BIND_ENUM_CONSTANT(FEATURE_NATIVE_DIALOG_INPUT);
 	BIND_ENUM_CONSTANT(FEATURE_NATIVE_DIALOG_FILE);
+	BIND_ENUM_CONSTANT(FEATURE_NATIVE_DIALOG_FILE_EXTRA);
+	BIND_ENUM_CONSTANT(FEATURE_WINDOW_DRAG);
+	BIND_ENUM_CONSTANT(FEATURE_SCREEN_EXCLUDE_FROM_CAPTURE);
+	BIND_ENUM_CONSTANT(FEATURE_WINDOW_EMBEDDING);
 
 	BIND_ENUM_CONSTANT(MOUSE_MODE_VISIBLE);
 	BIND_ENUM_CONSTANT(MOUSE_MODE_HIDDEN);
@@ -1122,6 +1155,8 @@ void DisplayServer::_bind_methods() {
 	BIND_ENUM_CONSTANT(WINDOW_FLAG_POPUP);
 	BIND_ENUM_CONSTANT(WINDOW_FLAG_EXTEND_TO_TITLE);
 	BIND_ENUM_CONSTANT(WINDOW_FLAG_MOUSE_PASSTHROUGH);
+	BIND_ENUM_CONSTANT(WINDOW_FLAG_SHARP_CORNERS);
+	BIND_ENUM_CONSTANT(WINDOW_FLAG_EXCLUDE_FROM_CAPTURE);
 	BIND_ENUM_CONSTANT(WINDOW_FLAG_MAX);
 
 	BIND_ENUM_CONSTANT(WINDOW_EVENT_MOUSE_ENTER);
@@ -1142,6 +1177,8 @@ void DisplayServer::_bind_methods() {
 	BIND_ENUM_CONSTANT(WINDOW_HANDLE);
 	BIND_ENUM_CONSTANT(WINDOW_VIEW);
 	BIND_ENUM_CONSTANT(OPENGL_CONTEXT);
+	BIND_ENUM_CONSTANT(EGL_DISPLAY);
+	BIND_ENUM_CONSTANT(EGL_CONFIG);
 
 	BIND_ENUM_CONSTANT(TTS_UTTERANCE_STARTED);
 	BIND_ENUM_CONSTANT(TTS_UTTERANCE_ENDED);
@@ -1197,9 +1234,9 @@ Vector<String> DisplayServer::get_create_function_rendering_drivers(int p_index)
 	return server_create_functions[p_index].get_rendering_drivers_function();
 }
 
-DisplayServer *DisplayServer::create(int p_index, const String &p_rendering_driver, WindowMode p_mode, VSyncMode p_vsync_mode, uint32_t p_flags, const Vector2i *p_position, const Vector2i &p_resolution, int p_screen, Context p_context, Error &r_error) {
+DisplayServer *DisplayServer::create(int p_index, const String &p_rendering_driver, WindowMode p_mode, VSyncMode p_vsync_mode, uint32_t p_flags, const Vector2i *p_position, const Vector2i &p_resolution, int p_screen, Context p_context, int64_t p_parent_window, Error &r_error) {
 	ERR_FAIL_INDEX_V(p_index, server_create_count, nullptr);
-	return server_create_functions[p_index].create_function(p_rendering_driver, p_mode, p_vsync_mode, p_flags, p_position, p_resolution, p_screen, p_context, r_error);
+	return server_create_functions[p_index].create_function(p_rendering_driver, p_mode, p_vsync_mode, p_flags, p_position, p_resolution, p_screen, p_context, p_parent_window, r_error);
 }
 
 void DisplayServer::_input_set_mouse_mode(Input::MouseMode p_mode) {
@@ -1223,10 +1260,20 @@ void DisplayServer::_input_set_custom_mouse_cursor_func(const Ref<Resource> &p_i
 }
 
 bool DisplayServer::can_create_rendering_device() {
+	if (get_singleton()->get_name() == "headless") {
+		return false;
+	}
+
 #if defined(RD_ENABLED)
 	RenderingDevice *device = RenderingDevice::get_singleton();
 	if (device) {
 		return true;
+	}
+
+	if (created_rendering_device == RenderingDeviceCreationStatus::SUCCESS) {
+		return true;
+	} else if (created_rendering_device == RenderingDeviceCreationStatus::FAILURE) {
+		return false;
 	}
 
 	Error err;
@@ -1258,7 +1305,14 @@ bool DisplayServer::can_create_rendering_device() {
 			memdelete(rd);
 			rd = nullptr;
 			if (err == OK) {
+				// Creating a RenderingDevice is quite slow.
+				// Cache the result for future usage, so that it's much faster on subsequent calls.
+				created_rendering_device = RenderingDeviceCreationStatus::SUCCESS;
+				memdelete(rcd);
+				rcd = nullptr;
 				return true;
+			} else {
+				created_rendering_device = RenderingDeviceCreationStatus::FAILURE;
 			}
 		}
 

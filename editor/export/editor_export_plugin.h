@@ -31,7 +31,6 @@
 #ifndef EDITOR_EXPORT_PLUGIN_H
 #define EDITOR_EXPORT_PLUGIN_H
 
-#include "core/extension/gdextension.h"
 #include "core/os/shared_object.h"
 #include "editor_export_platform.h"
 #include "editor_export_preset.h"
@@ -132,6 +131,7 @@ protected:
 	GDVIRTUAL1RC(TypedArray<Dictionary>, _get_export_options, const Ref<EditorExportPlatform> &);
 	GDVIRTUAL1RC(Dictionary, _get_export_options_overrides, const Ref<EditorExportPlatform> &);
 	GDVIRTUAL1RC(bool, _should_update_export_options, const Ref<EditorExportPlatform> &);
+	GDVIRTUAL2RC(bool, _get_export_option_visibility, const Ref<EditorExportPlatform> &, String);
 	GDVIRTUAL2RC(String, _get_export_option_warning, const Ref<EditorExportPlatform> &, String);
 
 	GDVIRTUAL0RC_REQUIRED(String, _get_name)
@@ -160,6 +160,7 @@ protected:
 	virtual void _get_export_options(const Ref<EditorExportPlatform> &p_export_platform, List<EditorExportPlatform::ExportOption> *r_options) const;
 	virtual Dictionary _get_export_options_overrides(const Ref<EditorExportPlatform> &p_export_platform) const;
 	virtual bool _should_update_export_options(const Ref<EditorExportPlatform> &p_export_platform) const;
+	virtual bool _get_export_option_visibility(const Ref<EditorExportPlatform> &p_export_platform, const String &p_option_name) const;
 	virtual String _get_export_option_warning(const Ref<EditorExportPlatform> &p_export_platform, const String &p_option_name) const;
 
 public:

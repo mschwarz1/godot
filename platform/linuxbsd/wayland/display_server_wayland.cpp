@@ -216,7 +216,8 @@ bool DisplayServerWayland::has_feature(Feature p_feature) const {
 		//case FEATURE_NATIVE_DIALOG:
 		//case FEATURE_NATIVE_DIALOG_INPUT:
 #ifdef DBUS_ENABLED
-		case FEATURE_NATIVE_DIALOG_FILE: {
+		case FEATURE_NATIVE_DIALOG_FILE:
+		case FEATURE_NATIVE_DIALOG_FILE_EXTRA: {
 			return true;
 		} break;
 #endif
@@ -317,6 +318,10 @@ Error DisplayServerWayland::file_dialog_with_options_show(const String &p_title,
 }
 
 #endif
+
+void DisplayServerWayland::beep() const {
+	wayland_thread.beep();
+}
 
 void DisplayServerWayland::mouse_set_mode(MouseMode p_mode) {
 	if (p_mode == mouse_mode) {
@@ -627,6 +632,18 @@ int64_t DisplayServerWayland::window_get_native_handle(HandleType p_handle_type,
 			}
 			return 0;
 		} break;
+		case EGL_DISPLAY: {
+			if (egl_manager) {
+				return (int64_t)egl_manager->get_display(p_window);
+			}
+			return 0;
+		}
+		case EGL_CONFIG: {
+			if (egl_manager) {
+				return (int64_t)egl_manager->get_config(p_window);
+			}
+			return 0;
+		}
 #endif // GLES3_ENABLED
 
 		default: {
@@ -969,6 +986,12 @@ DisplayServer::VSyncMode DisplayServerWayland::window_get_vsync_mode(DisplayServ
 	return DisplayServer::VSYNC_ENABLED;
 }
 
+void DisplayServerWayland::window_start_drag(WindowID p_window) {
+	MutexLock mutex_lock(wayland_thread.mutex);
+
+	wayland_thread.window_start_drag(p_window);
+}
+
 void DisplayServerWayland::cursor_set_shape(CursorShape p_shape) {
 	ERR_FAIL_INDEX(p_shape, CURSOR_MAX);
 
@@ -1286,8 +1309,8 @@ Vector<String> DisplayServerWayland::get_rendering_drivers_func() {
 	return drivers;
 }
 
-DisplayServer *DisplayServerWayland::create_func(const String &p_rendering_driver, WindowMode p_mode, VSyncMode p_vsync_mode, uint32_t p_flags, const Point2i *p_position, const Size2i &p_resolution, int p_screen, Context p_context, Error &r_error) {
-	DisplayServer *ds = memnew(DisplayServerWayland(p_rendering_driver, p_mode, p_vsync_mode, p_flags, p_resolution, p_context, r_error));
+DisplayServer *DisplayServerWayland::create_func(const String &p_rendering_driver, WindowMode p_mode, VSyncMode p_vsync_mode, uint32_t p_flags, const Point2i *p_position, const Size2i &p_resolution, int p_screen, Context p_context, int64_t p_parent_window, Error &r_error) {
+	DisplayServer *ds = memnew(DisplayServerWayland(p_rendering_driver, p_mode, p_vsync_mode, p_flags, p_resolution, p_context, p_parent_window, r_error));
 	if (r_error != OK) {
 		ERR_PRINT("Can't create the Wayland display server.");
 		memdelete(ds);
@@ -1297,7 +1320,7 @@ DisplayServer *DisplayServerWayland::create_func(const String &p_rendering_drive
 	return ds;
 }
 
-DisplayServerWayland::DisplayServerWayland(const String &p_rendering_driver, WindowMode p_mode, VSyncMode p_vsync_mode, uint32_t p_flags, const Vector2i &p_resolution, Context p_context, Error &r_error) {
+DisplayServerWayland::DisplayServerWayland(const String &p_rendering_driver, WindowMode p_mode, VSyncMode p_vsync_mode, uint32_t p_flags, const Vector2i &p_resolution, Context p_context, int64_t p_parent_window, Error &r_error) {
 #ifdef GLES3_ENABLED
 #ifdef SOWRAP_ENABLED
 #ifdef DEBUG_ENABLED
@@ -1344,13 +1367,16 @@ DisplayServerWayland::DisplayServerWayland(const String &p_rendering_driver, Win
 		if (rendering_context->initialize() != OK) {
 			memdelete(rendering_context);
 			rendering_context = nullptr;
+#if defined(GLES3_ENABLED)
 			bool fallback_to_opengl3 = GLOBAL_GET("rendering/rendering_device/fallback_to_opengl3");
 			if (fallback_to_opengl3 && rendering_driver != "opengl3") {
 				WARN_PRINT("Your video card drivers seem not to support the required Vulkan version, switching to OpenGL 3.");
 				rendering_driver = "opengl3";
 				OS::get_singleton()->set_current_rendering_method("gl_compatibility");
 				OS::get_singleton()->set_current_rendering_driver_name(rendering_driver);
-			} else {
+			} else
+#endif // GLES3_ENABLED
+			{
 				r_error = ERR_CANT_CREATE;
 
 				if (p_rendering_driver == "vulkan") {
@@ -1479,12 +1505,12 @@ DisplayServerWayland::DisplayServerWayland(const String &p_rendering_driver, Win
 			driver_found = true;
 		}
 	}
+#endif // GLES3_ENABLED
 
 	if (!driver_found) {
 		r_error = ERR_UNAVAILABLE;
 		ERR_FAIL_MSG("Video driver not found.");
 	}
-#endif // GLES3_ENABLED
 
 	cursor_set_shape(CURSOR_BUSY);
 

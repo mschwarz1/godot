@@ -13,7 +13,8 @@ from emscripten_helpers import (
 )
 from SCons.Util import WhereIs
 
-from methods import get_compiler_version, print_error, print_warning
+from methods import get_compiler_version, print_error, print_info, print_warning
+from platform_methods import validate_arch
 
 if TYPE_CHECKING:
     from SCons.Script.SConscript import SConsEnvironment
@@ -86,12 +87,7 @@ def get_flags():
 def configure(env: "SConsEnvironment"):
     # Validate arch.
     supported_arches = ["wasm32"]
-    if env["arch"] not in supported_arches:
-        print_error(
-            'Unsupported CPU architecture "%s" for Web. Supported architectures are: %s.'
-            % (env["arch"], ", ".join(supported_arches))
-        )
-        sys.exit(255)
+    validate_arch(env["arch"], get_name(), supported_arches)
 
     try:
         env["initial_memory"] = int(env["initial_memory"])
@@ -111,7 +107,7 @@ def configure(env: "SConsEnvironment"):
         env.Append(LINKFLAGS=["-sASSERTIONS=1"])
 
     if env.editor_build and env["initial_memory"] < 64:
-        print("Note: Forcing `initial_memory=64` as it is required for the web editor.")
+        print_info("Forcing `initial_memory=64` as it is required for the web editor.")
         env["initial_memory"] = 64
 
     env.Append(LINKFLAGS=["-sINITIAL_MEMORY=%sMB" % env["initial_memory"]])
@@ -205,7 +201,7 @@ def configure(env: "SConsEnvironment"):
         sys.exit(255)
 
     env.Prepend(CPPPATH=["#platform/web"])
-    env.Append(CPPDEFINES=["WEB_ENABLED", "UNIX_ENABLED"])
+    env.Append(CPPDEFINES=["WEB_ENABLED", "UNIX_ENABLED", "UNIX_SOCKET_UNAVAILABLE"])
 
     if env["opengl3"]:
         env.AppendUnique(CPPDEFINES=["GLES3_ENABLED"])

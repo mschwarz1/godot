@@ -30,8 +30,8 @@
 
 #include "gdextension_manager.h"
 
-#include "core/extension/gdextension_compat_hashes.h"
 #include "core/extension/gdextension_library_loader.h"
+#include "core/extension/gdextension_special_compat_hashes.h"
 #include "core/io/dir_access.h"
 #include "core/io/file_access.h"
 #include "core/object/script_language.h"
@@ -210,6 +210,12 @@ void GDExtensionManager::initialize_extensions(GDExtension::InitializationLevel 
 	ERR_FAIL_COND(int32_t(p_level) - 1 != level);
 	for (KeyValue<String, Ref<GDExtension>> &E : gdextension_map) {
 		E.value->initialize_library(p_level);
+
+		if (p_level == GDExtension::INITIALIZATION_LEVEL_EDITOR) {
+			for (const KeyValue<String, String> &kv : E.value->class_icon_paths) {
+				gdextension_class_icon_paths[kv.key] = kv.value;
+			}
+		}
 	}
 	level = p_level;
 }
@@ -258,7 +264,7 @@ void GDExtensionManager::load_extensions() {
 		String s = f->get_line().strip_edges();
 		if (!s.is_empty()) {
 			LoadStatus err = load_extension(s);
-			ERR_CONTINUE_MSG(err == LOAD_STATUS_FAILED, "Error loading extension: " + s);
+			ERR_CONTINUE_MSG(err == LOAD_STATUS_FAILED, vformat("Error loading extension: '%s'.", s));
 		}
 	}
 
@@ -302,7 +308,8 @@ bool GDExtensionManager::ensure_extensions_loaded(const HashSet<String> &p_exten
 	for (const String &loaded_extension : loaded_extensions) {
 		if (!p_extensions.has(loaded_extension)) {
 			// The extension may not have a .gdextension file.
-			if (!FileAccess::exists(loaded_extension)) {
+			const Ref<GDExtension> extension = GDExtensionManager::get_singleton()->get_extension(loaded_extension);
+			if (!extension->get_loader()->library_exists()) {
 				extensions_removed.push_back(loaded_extension);
 			}
 		}
@@ -384,7 +391,7 @@ GDExtensionManager::GDExtensionManager() {
 	singleton = this;
 
 #ifndef DISABLE_DEPRECATED
-	GDExtensionCompatHashes::initialize();
+	GDExtensionSpecialCompatHashes::initialize();
 #endif
 }
 
@@ -393,6 +400,6 @@ GDExtensionManager::~GDExtensionManager() {
 		singleton = nullptr;
 	}
 #ifndef DISABLE_DEPRECATED
-	GDExtensionCompatHashes::finalize();
+	GDExtensionSpecialCompatHashes::finalize();
 #endif
 }

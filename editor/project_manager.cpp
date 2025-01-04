@@ -34,11 +34,8 @@
 #include "core/io/config_file.h"
 #include "core/io/dir_access.h"
 #include "core/io/file_access.h"
-#include "core/io/resource_saver.h"
-#include "core/io/stream_peer_tls.h"
 #include "core/os/keyboard.h"
 #include "core/os/os.h"
-#include "core/os/time.h"
 #include "core/version.h"
 #include "editor/editor_about.h"
 #include "editor/editor_settings.h"
@@ -46,17 +43,15 @@
 #include "editor/engine_update_label.h"
 #include "editor/gui/editor_file_dialog.h"
 #include "editor/gui/editor_title_bar.h"
+#include "editor/gui/editor_version_button.h"
 #include "editor/plugins/asset_library_editor_plugin.h"
 #include "editor/project_manager/project_dialog.h"
 #include "editor/project_manager/project_list.h"
 #include "editor/project_manager/project_tag.h"
 #include "editor/project_manager/quick_settings_dialog.h"
-#include "editor/themes/editor_icons.h"
 #include "editor/themes/editor_scale.h"
 #include "editor/themes/editor_theme_manager.h"
 #include "main/main.h"
-#include "scene/gui/check_box.h"
-#include "scene/gui/color_rect.h"
 #include "scene/gui/flow_container.h"
 #include "scene/gui/line_edit.h"
 #include "scene/gui/margin_container.h"
@@ -64,7 +59,6 @@
 #include "scene/gui/panel_container.h"
 #include "scene/gui/rich_text_label.h"
 #include "scene/gui/separator.h"
-#include "scene/gui/texture_rect.h"
 #include "scene/main/window.h"
 #include "scene/theme/theme_db.h"
 #include "servers/display_server.h"
@@ -224,7 +218,7 @@ void ProjectManager::_update_theme(bool p_skip_creation) {
 		background_panel->add_theme_style_override(SceneStringName(panel), get_theme_stylebox(SNAME("Background"), EditorStringName(EditorStyles)));
 		main_view_container->add_theme_style_override(SceneStringName(panel), get_theme_stylebox(SceneStringName(panel), SNAME("TabContainer")));
 
-		title_bar_logo->set_icon(get_editor_theme_icon(SNAME("TitleBarLogo")));
+		title_bar_logo->set_button_icon(get_editor_theme_icon(SNAME("TitleBarLogo")));
 
 		_set_main_view_icon(MAIN_VIEW_PROJECTS, get_editor_theme_icon(SNAME("ProjectList")));
 		_set_main_view_icon(MAIN_VIEW_ASSETLIB, get_editor_theme_icon(SNAME("AssetLib")));
@@ -234,28 +228,28 @@ void ProjectManager::_update_theme(bool p_skip_creation) {
 			loading_label->add_theme_font_override(SceneStringName(font), get_theme_font(SNAME("bold"), EditorStringName(EditorFonts)));
 			project_list_panel->add_theme_style_override(SceneStringName(panel), get_theme_stylebox(SNAME("project_list"), SNAME("ProjectManager")));
 
-			empty_list_create_project->set_icon(get_editor_theme_icon(SNAME("Add")));
-			empty_list_import_project->set_icon(get_editor_theme_icon(SNAME("Load")));
-			empty_list_open_assetlib->set_icon(get_editor_theme_icon(SNAME("AssetLib")));
+			empty_list_create_project->set_button_icon(get_editor_theme_icon(SNAME("Add")));
+			empty_list_import_project->set_button_icon(get_editor_theme_icon(SNAME("Load")));
+			empty_list_open_assetlib->set_button_icon(get_editor_theme_icon(SNAME("AssetLib")));
 
 			empty_list_online_warning->add_theme_font_override(SceneStringName(font), get_theme_font(SNAME("italic"), EditorStringName(EditorFonts)));
 			empty_list_online_warning->add_theme_color_override(SceneStringName(font_color), get_theme_color(SNAME("font_placeholder_color"), EditorStringName(Editor)));
 
 			// Top bar.
 			search_box->set_right_icon(get_editor_theme_icon(SNAME("Search")));
-			quick_settings_button->set_icon(get_editor_theme_icon(SNAME("Tools")));
+			quick_settings_button->set_button_icon(get_editor_theme_icon(SNAME("Tools")));
 
 			// Sidebar.
-			create_btn->set_icon(get_editor_theme_icon(SNAME("Add")));
-			import_btn->set_icon(get_editor_theme_icon(SNAME("Load")));
-			scan_btn->set_icon(get_editor_theme_icon(SNAME("Search")));
-			open_btn->set_icon(get_editor_theme_icon(SNAME("Edit")));
-			run_btn->set_icon(get_editor_theme_icon(SNAME("Play")));
-			rename_btn->set_icon(get_editor_theme_icon(SNAME("Rename")));
-			manage_tags_btn->set_icon(get_editor_theme_icon("Script"));
-			erase_btn->set_icon(get_editor_theme_icon(SNAME("Remove")));
-			erase_missing_btn->set_icon(get_editor_theme_icon(SNAME("Clear")));
-			create_tag_btn->set_icon(get_editor_theme_icon("Add"));
+			create_btn->set_button_icon(get_editor_theme_icon(SNAME("Add")));
+			import_btn->set_button_icon(get_editor_theme_icon(SNAME("Load")));
+			scan_btn->set_button_icon(get_editor_theme_icon(SNAME("Search")));
+			open_btn->set_button_icon(get_editor_theme_icon(SNAME("Edit")));
+			run_btn->set_button_icon(get_editor_theme_icon(SNAME("Play")));
+			rename_btn->set_button_icon(get_editor_theme_icon(SNAME("Rename")));
+			manage_tags_btn->set_button_icon(get_editor_theme_icon("Script"));
+			erase_btn->set_button_icon(get_editor_theme_icon(SNAME("Remove")));
+			erase_missing_btn->set_button_icon(get_editor_theme_icon(SNAME("Clear")));
+			create_tag_btn->set_button_icon(get_editor_theme_icon("Add"));
 
 			tag_error->add_theme_color_override(SceneStringName(font_color), get_theme_color("error_color", EditorStringName(Editor)));
 			tag_edit_error->add_theme_color_override(SceneStringName(font_color), get_theme_color("error_color", EditorStringName(Editor)));
@@ -310,17 +304,17 @@ void ProjectManager::_set_main_view_icon(MainViewTab p_id, const Ref<Texture2D> 
 
 	Button *toggle_button = main_view_toggle_map[p_id];
 
-	Ref<Texture2D> old_icon = toggle_button->get_icon();
+	Ref<Texture2D> old_icon = toggle_button->get_button_icon();
 	if (old_icon.is_valid()) {
 		old_icon->disconnect_changed(callable_mp((Control *)toggle_button, &Control::update_minimum_size));
 	}
 
 	if (p_icon.is_valid()) {
-		toggle_button->set_icon(p_icon);
+		toggle_button->set_button_icon(p_icon);
 		// Make sure the control is updated if the icon is reimported.
 		p_icon->connect_changed(callable_mp((Control *)toggle_button, &Control::update_minimum_size));
 	} else {
-		toggle_button->set_icon(Ref<Texture2D>());
+		toggle_button->set_button_icon(Ref<Texture2D>());
 	}
 }
 
@@ -396,12 +390,6 @@ void ProjectManager::_restart_confirmed() {
 
 	_dim_window();
 	get_tree()->quit();
-}
-
-// Footer.
-
-void ProjectManager::_version_button_pressed() {
-	DisplayServer::get_singleton()->clipboard_set(version_btn->get_text());
 }
 
 // Project list.
@@ -723,14 +711,20 @@ void ProjectManager::_on_projects_updated() {
 	project_list->update_dock_menu();
 }
 
-void ProjectManager::_on_project_created(const String &dir) {
+void ProjectManager::_on_project_created(const String &dir, bool edit) {
 	project_list->add_project(dir, false);
 	project_list->save_config();
 	search_box->clear();
+
 	int i = project_list->refresh_project(dir);
 	project_list->select_project(i);
 	project_list->ensure_project_visible(i);
-	_open_selected_projects_ask();
+	_update_project_buttons();
+	_update_list_placeholder();
+
+	if (edit) {
+		_open_selected_projects_ask();
+	}
 
 	project_list->update_dock_menu();
 }
@@ -846,7 +840,7 @@ void ProjectManager::_set_new_tag_name(const String p_name) {
 		return;
 	}
 
-	if (p_name.contains(" ")) {
+	if (p_name.contains_char(' ')) {
 		tag_error->set_text(TTR("Tag name can't contain spaces."));
 		return;
 	}
@@ -1148,7 +1142,7 @@ ProjectManager::ProjectManager() {
 	}
 
 	// TRANSLATORS: This refers to the application where users manage their Godot projects.
-	DisplayServer::get_singleton()->window_set_title(VERSION_NAME + String(" - ") + TTR("Project Manager", "Application"));
+	SceneTree::get_singleton()->get_root()->set_title(VERSION_NAME + String(" - ") + TTR("Project Manager", "Application"));
 
 	SceneTree::get_singleton()->get_root()->connect("files_dropped", callable_mp(this, &ProjectManager::_files_dropped));
 
@@ -1265,19 +1259,19 @@ ProjectManager::ProjectManager() {
 
 			create_btn = memnew(Button);
 			create_btn->set_text(TTR("Create"));
-			create_btn->set_shortcut(ED_SHORTCUT("project_manager/new_project", TTR("New Project"), KeyModifierMask::CMD_OR_CTRL | Key::N));
+			create_btn->set_shortcut(ED_SHORTCUT("project_manager/new_project", TTRC("New Project"), KeyModifierMask::CMD_OR_CTRL | Key::N));
 			create_btn->connect(SceneStringName(pressed), callable_mp(this, &ProjectManager::_new_project));
 			hb->add_child(create_btn);
 
 			import_btn = memnew(Button);
 			import_btn->set_text(TTR("Import"));
-			import_btn->set_shortcut(ED_SHORTCUT("project_manager/import_project", TTR("Import Project"), KeyModifierMask::CMD_OR_CTRL | Key::I));
+			import_btn->set_shortcut(ED_SHORTCUT("project_manager/import_project", TTRC("Import Project"), KeyModifierMask::CMD_OR_CTRL | Key::I));
 			import_btn->connect(SceneStringName(pressed), callable_mp(this, &ProjectManager::_import_project));
 			hb->add_child(import_btn);
 
 			scan_btn = memnew(Button);
 			scan_btn->set_text(TTR("Scan"));
-			scan_btn->set_shortcut(ED_SHORTCUT("project_manager/scan_projects", TTR("Scan Projects"), KeyModifierMask::CMD_OR_CTRL | Key::S));
+			scan_btn->set_shortcut(ED_SHORTCUT("project_manager/scan_projects", TTRC("Scan Projects"), KeyModifierMask::CMD_OR_CTRL | Key::S));
 			scan_btn->connect(SceneStringName(pressed), callable_mp(this, &ProjectManager::_scan_projects));
 			hb->add_child(scan_btn);
 
@@ -1291,7 +1285,7 @@ ProjectManager::ProjectManager() {
 			search_box->set_tooltip_text(TTR("This field filters projects by name and last path component.\nTo filter projects by name and full path, the query must contain at least one `/` character."));
 			search_box->set_clear_button_enabled(true);
 			search_box->connect(SceneStringName(text_changed), callable_mp(this, &ProjectManager::_on_search_term_changed));
-			search_box->connect("text_submitted", callable_mp(this, &ProjectManager::_on_search_term_submitted));
+			search_box->connect(SceneStringName(text_submitted), callable_mp(this, &ProjectManager::_on_search_term_submitted));
 			search_box->set_h_size_flags(Control::SIZE_EXPAND_FILL);
 			hb->add_child(search_box);
 
@@ -1306,15 +1300,10 @@ ProjectManager::ProjectManager() {
 			filter_option->connect(SceneStringName(item_selected), callable_mp(this, &ProjectManager::_on_order_option_changed));
 			hb->add_child(filter_option);
 
-			Vector<String> sort_filter_titles;
-			sort_filter_titles.push_back(TTR("Last Edited"));
-			sort_filter_titles.push_back(TTR("Name"));
-			sort_filter_titles.push_back(TTR("Path"));
-			sort_filter_titles.push_back(TTR("Tags"));
-
-			for (int i = 0; i < sort_filter_titles.size(); i++) {
-				filter_option->add_item(sort_filter_titles[i]);
-			}
+			filter_option->add_item(TTR("Last Edited"));
+			filter_option->add_item(TTR("Name"));
+			filter_option->add_item(TTR("Path"));
+			filter_option->add_item(TTR("Tags"));
 		}
 
 		// Project list and its sidebar.
@@ -1394,20 +1383,20 @@ ProjectManager::ProjectManager() {
 
 			open_btn = memnew(Button);
 			open_btn->set_text(TTR("Edit"));
-			open_btn->set_shortcut(ED_SHORTCUT("project_manager/edit_project", TTR("Edit Project"), KeyModifierMask::CMD_OR_CTRL | Key::E));
+			open_btn->set_shortcut(ED_SHORTCUT("project_manager/edit_project", TTRC("Edit Project"), KeyModifierMask::CMD_OR_CTRL | Key::E));
 			open_btn->connect(SceneStringName(pressed), callable_mp(this, &ProjectManager::_open_selected_projects_ask));
 			project_list_sidebar->add_child(open_btn);
 
 			run_btn = memnew(Button);
 			run_btn->set_text(TTR("Run"));
-			run_btn->set_shortcut(ED_SHORTCUT("project_manager/run_project", TTR("Run Project"), KeyModifierMask::CMD_OR_CTRL | Key::R));
+			run_btn->set_shortcut(ED_SHORTCUT("project_manager/run_project", TTRC("Run Project"), KeyModifierMask::CMD_OR_CTRL | Key::R));
 			run_btn->connect(SceneStringName(pressed), callable_mp(this, &ProjectManager::_run_project));
 			project_list_sidebar->add_child(run_btn);
 
 			rename_btn = memnew(Button);
 			rename_btn->set_text(TTR("Rename"));
 			// The F2 shortcut isn't overridden with Enter on macOS as Enter is already used to edit a project.
-			rename_btn->set_shortcut(ED_SHORTCUT("project_manager/rename_project", TTR("Rename Project"), Key::F2));
+			rename_btn->set_shortcut(ED_SHORTCUT("project_manager/rename_project", TTRC("Rename Project"), Key::F2));
 			rename_btn->connect(SceneStringName(pressed), callable_mp(this, &ProjectManager::_rename_project));
 			project_list_sidebar->add_child(rename_btn);
 
@@ -1417,7 +1406,7 @@ ProjectManager::ProjectManager() {
 
 			erase_btn = memnew(Button);
 			erase_btn->set_text(TTR("Remove"));
-			erase_btn->set_shortcut(ED_SHORTCUT("project_manager/remove_project", TTR("Remove Project"), Key::KEY_DELETE));
+			erase_btn->set_shortcut(ED_SHORTCUT("project_manager/remove_project", TTRC("Remove Project"), Key::KEY_DELETE));
 			erase_btn->connect(SceneStringName(pressed), callable_mp(this, &ProjectManager::_erase_project));
 			project_list_sidebar->add_child(erase_btn);
 
@@ -1459,23 +1448,9 @@ ProjectManager::ProjectManager() {
 		update_label->connect("offline_clicked", callable_mp(this, &ProjectManager::_show_quick_settings));
 #endif
 
-		version_btn = memnew(LinkButton);
-		String hash = String(VERSION_HASH);
-		if (hash.length() != 0) {
-			hash = " " + vformat("[%s]", hash.left(9));
-		}
-		version_btn->set_text("v" VERSION_FULL_BUILD + hash);
+		EditorVersionButton *version_btn = memnew(EditorVersionButton(EditorVersionButton::FORMAT_WITH_BUILD));
 		// Fade the version label to be less prominent, but still readable.
 		version_btn->set_self_modulate(Color(1, 1, 1, 0.6));
-		version_btn->set_underline_mode(LinkButton::UNDERLINE_MODE_ON_HOVER);
-		String build_date;
-		if (VERSION_TIMESTAMP > 0) {
-			build_date = Time::get_singleton()->get_datetime_string_from_unix_time(VERSION_TIMESTAMP, true) + " UTC";
-		} else {
-			build_date = TTR("(unknown)");
-		}
-		version_btn->set_tooltip_text(vformat(TTR("Git commit date: %s\nClick to copy the version information."), build_date));
-		version_btn->connect(SceneStringName(pressed), callable_mp(this, &ProjectManager::_version_button_pressed));
 		footer_bar->add_child(version_btn);
 	}
 
@@ -1609,7 +1584,7 @@ ProjectManager::ProjectManager() {
 		new_tag_name = memnew(LineEdit);
 		tag_vb->add_child(new_tag_name);
 		new_tag_name->connect(SceneStringName(text_changed), callable_mp(this, &ProjectManager::_set_new_tag_name));
-		new_tag_name->connect("text_submitted", callable_mp(this, &ProjectManager::_create_new_tag).unbind(1));
+		new_tag_name->connect(SceneStringName(text_submitted), callable_mp(this, &ProjectManager::_create_new_tag).unbind(1));
 		create_tag_dialog->connect("about_to_popup", callable_mp(new_tag_name, &LineEdit::clear));
 		create_tag_dialog->connect("about_to_popup", callable_mp((Control *)new_tag_name, &Control::grab_focus), CONNECT_DEFERRED);
 

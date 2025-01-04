@@ -332,6 +332,7 @@ void TextEdit::Text::clear() {
 
 	max_line_width_dirty = true;
 	max_line_height_dirty = true;
+	total_visible_line_count = 0;
 
 	Line line;
 	line.gutters.resize(gutter_count);
@@ -421,6 +422,10 @@ void TextEdit::Text::remove_range(int p_from_line, int p_to_line) {
 
 	for (int i = p_from_line; i < p_to_line; i++) {
 		const Line &text_line = text[i];
+		if (text_line.hidden) {
+			continue;
+		}
+
 		if (text_line.height == max_line_height) {
 			max_line_height_dirty = true;
 		}
@@ -435,6 +440,8 @@ void TextEdit::Text::remove_range(int p_from_line, int p_to_line) {
 		text.write[(i - diff) + 1] = text[i + 1];
 	}
 	text.resize(text.size() - diff);
+
+	ERR_FAIL_COND(total_visible_line_count < 0); // BUG
 }
 
 void TextEdit::Text::add_gutter(int p_at) {
@@ -1598,7 +1605,9 @@ void TextEdit::_notification(int p_what) {
 				draw_caret = true;
 			}
 
-			_show_virtual_keyboard();
+			if (editable) {
+				_show_virtual_keyboard();
+			}
 		} break;
 
 		case NOTIFICATION_FOCUS_EXIT: {
@@ -2001,7 +2010,9 @@ void TextEdit::gui_input(const Ref<InputEvent> &p_gui_input) {
 				}
 			}
 
-			_show_virtual_keyboard();
+			if (editable) {
+				_show_virtual_keyboard();
+			}
 		}
 	}
 
@@ -2945,6 +2956,7 @@ void TextEdit::_update_caches() {
 	if (syntax_highlighter.is_valid()) {
 		syntax_highlighter->set_text_edit(this);
 	}
+	_clear_syntax_highlighting_cache();
 }
 
 void TextEdit::_close_ime_window() {
@@ -3169,6 +3181,7 @@ bool TextEdit::has_ime_text() const {
 
 void TextEdit::cancel_ime() {
 	if (!has_ime_text()) {
+		_close_ime_window();
 		return;
 	}
 	ime_text = String();
@@ -3181,6 +3194,7 @@ void TextEdit::cancel_ime() {
 
 void TextEdit::apply_ime() {
 	if (!has_ime_text()) {
+		_close_ime_window();
 		return;
 	}
 
@@ -4166,7 +4180,7 @@ void TextEdit::redo() {
 	}
 	_push_current_op();
 
-	if (undo_stack_pos == nullptr) {
+	if (!has_redo()) {
 		return; // Nothing to do.
 	}
 
@@ -5069,7 +5083,7 @@ bool TextEdit::multicaret_edit_ignore_caret(int p_caret) const {
 }
 
 bool TextEdit::is_caret_visible(int p_caret) const {
-	ERR_FAIL_INDEX_V(p_caret, carets.size(), 0);
+	ERR_FAIL_INDEX_V(p_caret, carets.size(), false);
 	return carets[p_caret].visible;
 }
 
@@ -5736,7 +5750,7 @@ TextServer::AutowrapMode TextEdit::get_autowrap_mode() const {
 }
 
 bool TextEdit::is_line_wrapped(int p_line) const {
-	ERR_FAIL_INDEX_V(p_line, text.size(), 0);
+	ERR_FAIL_INDEX_V(p_line, text.size(), false);
 	if (get_line_wrapping_mode() == LineWrappingMode::LINE_WRAPPING_NONE) {
 		return false;
 	}
@@ -6415,6 +6429,7 @@ void TextEdit::set_syntax_highlighter(Ref<SyntaxHighlighter> p_syntax_highlighte
 	if (syntax_highlighter.is_valid()) {
 		syntax_highlighter->set_text_edit(this);
 	}
+	_clear_syntax_highlighting_cache();
 	queue_redraw();
 }
 
@@ -7301,6 +7316,10 @@ void TextEdit::_paste_internal(int p_caret) {
 	}
 
 	String clipboard = DisplayServer::get_singleton()->clipboard_get();
+	if (clipboard.is_empty()) {
+		// Nothing to paste.
+		return;
+	}
 
 	// Paste a full line. Ignore '\r' characters that may have been added to the clipboard by the OS.
 	if (get_caret_count() == 1 && !has_selection(0) && !cut_copy_line.is_empty() && cut_copy_line == clipboard.replace("\r", "")) {

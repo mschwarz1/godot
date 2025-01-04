@@ -30,6 +30,8 @@
 
 #include "camera_feed_linux.h"
 
+#include "servers/rendering_server.h"
+
 #include <fcntl.h>
 #include <sys/ioctl.h>
 #include <sys/mman.h>
@@ -145,7 +147,7 @@ bool CameraFeedLinux::_request_buffers() {
 		}
 
 		buffers[i].length = buffer.length;
-		buffers[i].start = mmap(NULL, buffer.length, PROT_READ | PROT_WRITE, MAP_SHARED, file_descriptor, buffer.m.offset);
+		buffers[i].start = mmap(nullptr, buffer.length, PROT_READ | PROT_WRITE, MAP_SHARED, file_descriptor, buffer.m.offset);
 
 		if (buffers[i].start == MAP_FAILED) {
 			for (unsigned int b = 0; b < i; b++) {
@@ -232,6 +234,7 @@ String CameraFeedLinux::get_device_name() const {
 }
 
 bool CameraFeedLinux::activate_feed() {
+	ERR_FAIL_COND_V_MSG(selected_format == -1, false, "CameraFeed format needs to be set before activating.");
 	file_descriptor = open(device_name.ascii(), O_RDWR | O_NONBLOCK, 0);
 	if (_request_buffers() && _start_capturing()) {
 		buffer_decoder = _create_buffer_decoder();
@@ -302,15 +305,13 @@ Array CameraFeedLinux::get_formats() const {
 }
 
 CameraFeed::FeedFormat CameraFeedLinux::get_format() const {
-	return formats[selected_format];
+	FeedFormat feed_format = {};
+	return selected_format == -1 ? feed_format : formats[selected_format];
 }
 
 bool CameraFeedLinux::set_format(int p_index, const Dictionary &p_parameters) {
 	ERR_FAIL_COND_V_MSG(active, false, "Feed is active.");
 	ERR_FAIL_INDEX_V_MSG(p_index, formats.size(), false, "Invalid format index.");
-
-	parameters = p_parameters.duplicate();
-	selected_format = p_index;
 
 	FeedFormat feed_format = formats[p_index];
 
@@ -344,6 +345,8 @@ bool CameraFeedLinux::set_format(int p_index, const Dictionary &p_parameters) {
 	}
 	close(file_descriptor);
 
+	parameters = p_parameters.duplicate();
+	selected_format = p_index;
 	emit_signal(SNAME("format_changed"));
 
 	return true;
@@ -353,7 +356,6 @@ CameraFeedLinux::CameraFeedLinux(const String &p_device_name) :
 		CameraFeed() {
 	device_name = p_device_name;
 	_query_device(device_name);
-	set_format(0, Dictionary());
 }
 
 CameraFeedLinux::~CameraFeedLinux() {

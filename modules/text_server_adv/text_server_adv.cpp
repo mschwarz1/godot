@@ -50,7 +50,6 @@ using namespace godot;
 #include "core/config/project_settings.h"
 #include "core/error/error_macros.h"
 #include "core/object/worker_thread_pool.h"
-#include "core/string/print_string.h"
 #include "core/string/translation_server.h"
 #include "scene/resources/image_texture.h"
 
@@ -442,6 +441,8 @@ bool TextServerAdvanced::_load_support_data(const String &p_filename) {
 	}
 #else
 	if (!icu_data_loaded) {
+		UErrorCode err = U_ZERO_ERROR;
+#ifdef ICU_DATA_NAME
 		String filename = (p_filename.is_empty()) ? String("res://") + _MKSTR(ICU_DATA_NAME) : p_filename;
 
 		Ref<FileAccess> f = FileAccess::open(filename, FileAccess::READ);
@@ -451,13 +452,13 @@ bool TextServerAdvanced::_load_support_data(const String &p_filename) {
 		uint64_t len = f->get_length();
 		icu_data = f->get_buffer(len);
 
-		UErrorCode err = U_ZERO_ERROR;
 		udata_setCommonData(icu_data.ptr(), &err);
 		if (U_FAILURE(err)) {
 			ERR_FAIL_V_MSG(false, u_errorName(err));
 		}
 
 		err = U_ZERO_ERROR;
+#endif
 		u_init(&err);
 		if (U_FAILURE(err)) {
 			ERR_FAIL_V_MSG(false, u_errorName(err));
@@ -495,6 +496,20 @@ bool TextServerAdvanced::_save_support_data(const String &p_filename) const {
 	return true;
 #else
 	return false;
+#endif
+}
+
+PackedByteArray TextServerAdvanced::_get_support_data() const {
+	_THREAD_SAFE_METHOD_
+#ifdef ICU_STATIC_DATA
+
+	PackedByteArray icu_data_static;
+	icu_data_static.resize(U_ICUDATA_SIZE);
+	memcpy(icu_data_static.ptrw(), U_ICUDATA_ENTRY_POINT, U_ICUDATA_SIZE);
+
+	return icu_data_static;
+#else
+	return icu_data;
 #endif
 }
 
@@ -1357,7 +1372,7 @@ _FORCE_INLINE_ bool TextServerAdvanced::_ensure_glyph(FontAdvanced *p_font_data,
 	return false;
 }
 
-_FORCE_INLINE_ bool TextServerAdvanced::_ensure_cache_for_size(FontAdvanced *p_font_data, const Vector2i &p_size, FontForSizeAdvanced *&r_cache_for_size) const {
+_FORCE_INLINE_ bool TextServerAdvanced::_ensure_cache_for_size(FontAdvanced *p_font_data, const Vector2i &p_size, FontForSizeAdvanced *&r_cache_for_size, bool p_silent) const {
 	ERR_FAIL_COND_V(p_size.x <= 0, false);
 
 	HashMap<Vector2i, FontForSizeAdvanced *>::Iterator E = p_font_data->cache.find(p_size);
@@ -1378,7 +1393,11 @@ _FORCE_INLINE_ bool TextServerAdvanced::_ensure_cache_for_size(FontAdvanced *p_f
 				error = FT_Init_FreeType(&ft_library);
 				if (error != 0) {
 					memdelete(fd);
-					ERR_FAIL_V_MSG(false, "FreeType: Error initializing library: '" + String(FT_Error_String(error)) + "'.");
+					if (p_silent) {
+						return false;
+					} else {
+						ERR_FAIL_V_MSG(false, "FreeType: Error initializing library: '" + String(FT_Error_String(error)) + "'.");
+					}
 				}
 #ifdef MODULE_SVG_ENABLED
 				FT_Property_Set(ft_library, "ot-svg", "svg-hooks", get_tvg_svg_in_ot_hooks());
@@ -1412,7 +1431,11 @@ _FORCE_INLINE_ bool TextServerAdvanced::_ensure_cache_for_size(FontAdvanced *p_f
 				FT_Done_Face(fd->face);
 				fd->face = nullptr;
 				memdelete(fd);
-				ERR_FAIL_V_MSG(false, "FreeType: Error loading font: '" + String(FT_Error_String(error)) + "'.");
+				if (p_silent) {
+					return false;
+				} else {
+					ERR_FAIL_V_MSG(false, "FreeType: Error loading font: '" + String(FT_Error_String(error)) + "'.");
+				}
 			}
 		}
 
@@ -1847,7 +1870,11 @@ _FORCE_INLINE_ bool TextServerAdvanced::_ensure_cache_for_size(FontAdvanced *p_f
 		}
 #else
 		memdelete(fd);
-		ERR_FAIL_V_MSG(false, "FreeType: Can't load dynamic font, engine is compiled without FreeType support!");
+		if (p_silent) {
+			return false;
+		} else {
+			ERR_FAIL_V_MSG(false, "FreeType: Can't load dynamic font, engine is compiled without FreeType support!");
+		}
 #endif
 	} else {
 		// Init bitmap font.
@@ -1856,6 +1883,16 @@ _FORCE_INLINE_ bool TextServerAdvanced::_ensure_cache_for_size(FontAdvanced *p_f
 	p_font_data->cache.insert(p_size, fd);
 	r_cache_for_size = fd;
 	return true;
+}
+
+_FORCE_INLINE_ bool TextServerAdvanced::_font_validate(const RID &p_font_rid) const {
+	FontAdvanced *fd = _get_font_data(p_font_rid);
+	ERR_FAIL_NULL_V(fd, false);
+
+	MutexLock lock(fd->mutex);
+	Vector2i size = _get_size(fd, 16);
+	FontForSizeAdvanced *ffsd = nullptr;
+	return _ensure_cache_for_size(fd, size, ffsd, true);
 }
 
 _FORCE_INLINE_ void TextServerAdvanced::_font_clear_cache(FontAdvanced *p_font_data) {
@@ -2441,6 +2478,22 @@ TextServer::SubpixelPositioning TextServerAdvanced::_font_get_subpixel_positioni
 
 	MutexLock lock(fd->mutex);
 	return fd->subpixel_positioning;
+}
+
+void TextServerAdvanced::_font_set_keep_rounding_remainders(const RID &p_font_rid, bool p_keep_rounding_remainders) {
+	FontAdvanced *fd = _get_font_data(p_font_rid);
+	ERR_FAIL_NULL(fd);
+
+	MutexLock lock(fd->mutex);
+	fd->keep_rounding_remainders = p_keep_rounding_remainders;
+}
+
+bool TextServerAdvanced::_font_get_keep_rounding_remainders(const RID &p_font_rid) const {
+	FontAdvanced *fd = _get_font_data(p_font_rid);
+	ERR_FAIL_NULL_V(fd, false);
+
+	MutexLock lock(fd->mutex);
+	return fd->keep_rounding_remainders;
 }
 
 void TextServerAdvanced::_font_set_embolden(const RID &p_font_rid, double p_strength) {
@@ -4822,10 +4875,10 @@ double TextServerAdvanced::_shaped_text_fit_to_width(const RID &p_shaped, double
 
 	MutexLock lock(sd->mutex);
 	if (!sd->valid.is_set()) {
-		const_cast<TextServerAdvanced *>(this)->_shaped_text_shape(p_shaped);
+		_shaped_text_shape(p_shaped);
 	}
 	if (!sd->justification_ops_valid) {
-		const_cast<TextServerAdvanced *>(this)->_shaped_text_update_justification_ops(p_shaped);
+		_shaped_text_update_justification_ops(p_shaped);
 	}
 
 	sd->fit_width_minimum_reached = false;
@@ -4979,10 +5032,10 @@ double TextServerAdvanced::_shaped_text_tab_align(const RID &p_shaped, const Pac
 
 	MutexLock lock(sd->mutex);
 	if (!sd->valid.is_set()) {
-		const_cast<TextServerAdvanced *>(this)->_shaped_text_shape(p_shaped);
+		_shaped_text_shape(p_shaped);
 	}
 	if (!sd->line_breaks_valid) {
-		const_cast<TextServerAdvanced *>(this)->_shaped_text_update_breaks(p_shaped);
+		_shaped_text_update_breaks(p_shaped);
 	}
 
 	for (int i = 0; i < p_tab_stops.size(); i++) {
@@ -5106,6 +5159,10 @@ RID TextServerAdvanced::_find_sys_font_for_text(const RID &p_fdef, const String 
 			SystemFontCacheRec sysf;
 			sysf.rid = _create_font();
 			_font_set_data_ptr(sysf.rid, font_data.ptr(), font_data.size());
+			if (!_font_validate(sysf.rid)) {
+				_free_rid(sysf.rid);
+				continue;
+			}
 
 			Dictionary var = dvar;
 			// Select matching style from collection.
@@ -5167,6 +5224,7 @@ RID TextServerAdvanced::_find_sys_font_for_text(const RID &p_fdef, const String 
 			_font_set_force_autohinter(sysf.rid, key.force_autohinter);
 			_font_set_hinting(sysf.rid, key.hinting);
 			_font_set_subpixel_positioning(sysf.rid, key.subpixel_positioning);
+			_font_set_keep_rounding_remainders(sysf.rid, key.keep_rounding_remainders);
 			_font_set_variation_coordinates(sysf.rid, var);
 			_font_set_oversampling(sysf.rid, key.oversampling);
 			_font_set_embolden(sysf.rid, key.embolden);
@@ -5236,42 +5294,44 @@ void TextServerAdvanced::_shaped_text_overrun_trim_to_width(const RID &p_shaped_
 
 	// Find usable fonts, if fonts from the last glyph do not have required chars.
 	RID dot_gl_font_rid = sd_glyphs[sd_size - 1].font_rid;
-	if (!_font_has_char(dot_gl_font_rid, sd->el_char)) {
-		const Array &fonts = spans[spans.size() - 1].fonts;
-		for (int i = 0; i < fonts.size(); i++) {
-			if (_font_has_char(fonts[i], sd->el_char)) {
-				dot_gl_font_rid = fonts[i];
-				found_el_char = true;
-				break;
-			}
-		}
-		if (!found_el_char && OS::get_singleton()->has_feature("system_fonts") && fonts.size() > 0 && _font_is_allow_system_fallback(fonts[0])) {
-			const char32_t u32str[] = { sd->el_char, 0 };
-			RID rid = _find_sys_font_for_text(fonts[0], String(), spans[spans.size() - 1].language, u32str);
-			if (rid.is_valid()) {
-				dot_gl_font_rid = rid;
-				found_el_char = true;
-			}
-		}
-	} else {
-		found_el_char = true;
-	}
-	if (!found_el_char) {
-		bool found_dot_char = false;
-		dot_gl_font_rid = sd_glyphs[sd_size - 1].font_rid;
-		if (!_font_has_char(dot_gl_font_rid, '.')) {
+	if (add_ellipsis || enforce_ellipsis) {
+		if (!_font_has_char(dot_gl_font_rid, sd->el_char)) {
 			const Array &fonts = spans[spans.size() - 1].fonts;
 			for (int i = 0; i < fonts.size(); i++) {
-				if (_font_has_char(fonts[i], '.')) {
+				if (_font_has_char(fonts[i], sd->el_char)) {
 					dot_gl_font_rid = fonts[i];
-					found_dot_char = true;
+					found_el_char = true;
 					break;
 				}
 			}
-			if (!found_dot_char && OS::get_singleton()->has_feature("system_fonts") && fonts.size() > 0 && _font_is_allow_system_fallback(fonts[0])) {
-				RID rid = _find_sys_font_for_text(fonts[0], String(), spans[spans.size() - 1].language, ".");
+			if (!found_el_char && OS::get_singleton()->has_feature("system_fonts") && fonts.size() > 0 && _font_is_allow_system_fallback(fonts[0])) {
+				const char32_t u32str[] = { sd->el_char, 0 };
+				RID rid = _find_sys_font_for_text(fonts[0], String(), spans[spans.size() - 1].language, u32str);
 				if (rid.is_valid()) {
 					dot_gl_font_rid = rid;
+					found_el_char = true;
+				}
+			}
+		} else {
+			found_el_char = true;
+		}
+		if (!found_el_char) {
+			bool found_dot_char = false;
+			dot_gl_font_rid = sd_glyphs[sd_size - 1].font_rid;
+			if (!_font_has_char(dot_gl_font_rid, '.')) {
+				const Array &fonts = spans[spans.size() - 1].fonts;
+				for (int i = 0; i < fonts.size(); i++) {
+					if (_font_has_char(fonts[i], '.')) {
+						dot_gl_font_rid = fonts[i];
+						found_dot_char = true;
+						break;
+					}
+				}
+				if (!found_dot_char && OS::get_singleton()->has_feature("system_fonts") && fonts.size() > 0 && _font_is_allow_system_fallback(fonts[0])) {
+					RID rid = _find_sys_font_for_text(fonts[0], String(), spans[spans.size() - 1].language, ".");
+					if (rid.is_valid()) {
+						dot_gl_font_rid = rid;
+					}
 				}
 			}
 		}
@@ -5287,8 +5347,8 @@ void TextServerAdvanced::_shaped_text_overrun_trim_to_width(const RID &p_shaped_
 		}
 	}
 
-	int32_t dot_gl_idx = dot_gl_font_rid.is_valid() ? _font_get_glyph_index(dot_gl_font_rid, last_gl_font_size, (found_el_char ? sd->el_char : '.'), 0) : -1;
-	Vector2 dot_adv = dot_gl_font_rid.is_valid() ? _font_get_glyph_advance(dot_gl_font_rid, last_gl_font_size, dot_gl_idx) : Vector2();
+	int32_t dot_gl_idx = ((add_ellipsis || enforce_ellipsis) && dot_gl_font_rid.is_valid()) ? _font_get_glyph_index(dot_gl_font_rid, last_gl_font_size, (found_el_char ? sd->el_char : '.'), 0) : -1;
+	Vector2 dot_adv = ((add_ellipsis || enforce_ellipsis) && dot_gl_font_rid.is_valid()) ? _font_get_glyph_advance(dot_gl_font_rid, last_gl_font_size, dot_gl_idx) : Vector2();
 	int32_t whitespace_gl_idx = whitespace_gl_font_rid.is_valid() ? _font_get_glyph_index(whitespace_gl_font_rid, last_gl_font_size, ' ', 0) : -1;
 	Vector2 whitespace_adv = whitespace_gl_font_rid.is_valid() ? _font_get_glyph_advance(whitespace_gl_font_rid, last_gl_font_size, whitespace_gl_idx) : Vector2();
 
@@ -6205,6 +6265,9 @@ void TextServerAdvanced::_shape_run(ShapedTextDataAdvanced *p_sd, int64_t p_star
 #endif
 
 			gl.index = glyph_info[i].codepoint;
+			if ((p_sd->text[glyph_info[i].cluster] == 0x0009) || u_isblank(p_sd->text[glyph_info[i].cluster]) || is_linebreak(p_sd->text[glyph_info[i].cluster])) {
+				adv_rem = 0.0; // Reset on blank.
+			}
 			if (gl.index != 0) {
 				FontGlyph fgl;
 				_ensure_glyph(fd, fss, gl.index | mod, fgl);
@@ -6226,12 +6289,16 @@ void TextServerAdvanced::_shape_run(ShapedTextDataAdvanced *p_sd, int64_t p_star
 					} else {
 						double full_adv = adv_rem + ((double)glyph_pos[i].x_advance / (64.0 / scale) + ea);
 						gl.advance = Math::round(full_adv);
-						adv_rem = full_adv - gl.advance;
+						if (fd->keep_rounding_remainders) {
+							adv_rem = full_adv - gl.advance;
+						}
 					}
 				} else {
 					double full_adv = adv_rem + ((double)glyph_pos[i].y_advance / (64.0 / scale));
 					gl.advance = -Math::round(full_adv);
-					adv_rem = full_adv + gl.advance;
+					if (fd->keep_rounding_remainders) {
+						adv_rem = full_adv + gl.advance;
+					}
 				}
 				if (p_sd->orientation == ORIENTATION_HORIZONTAL) {
 					gl.y_off += _font_get_baseline_offset(gl.font_rid) * (double)(_font_get_ascent(gl.font_rid, gl.font_size) + _font_get_descent(gl.font_rid, gl.font_size));
@@ -6566,7 +6633,7 @@ const Glyph *TextServerAdvanced::_shaped_text_sort_logical(const RID &p_shaped) 
 
 	MutexLock lock(sd->mutex);
 	if (!sd->valid.is_set()) {
-		const_cast<TextServerAdvanced *>(this)->_shaped_text_shape(p_shaped);
+		_shaped_text_shape(p_shaped);
 	}
 
 	if (!sd->sort_valid) {
