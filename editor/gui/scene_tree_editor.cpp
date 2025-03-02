@@ -570,8 +570,13 @@ void SceneTreeEditor::_update_node(Node *p_node, TreeItem *p_item, bool p_part_o
 			Color button_color = Color(1, 1, 1);
 			// Can't set tooltip after adding button, need to do it before.
 			if (scr->is_tool()) {
-				additional_notes += "\n" + TTR("This script is currently running in the editor.");
-				button_color = get_theme_color(SNAME("accent_color"), EditorStringName(Editor));
+				if (Engine::get_singleton()->is_recovery_mode_hint()) {
+					additional_notes += "\n" + TTR("This script can run in the editor.\nIt is currently disabled due to recovery mode.");
+					button_color = get_theme_color(SNAME("warning_color"), EditorStringName(Editor));
+				} else {
+					additional_notes += "\n" + TTR("This script is currently running in the editor.");
+					button_color = get_theme_color(SNAME("accent_color"), EditorStringName(Editor));
+				}
 			}
 			if (EditorNode::get_singleton()->get_object_custom_type_base(p_node) == scr) {
 				additional_notes += "\n" + TTR("This script is a custom type.");
@@ -892,6 +897,15 @@ void SceneTreeEditor::_update_tree(bool p_scroll_to_selected) {
 		return;
 	}
 
+	Node *scene_node = get_scene_node();
+
+	if (node_cache.current_scene_node != scene_node) {
+		_reset();
+		marked.clear();
+		node_cache.current_scene_node = scene_node;
+		node_cache.force_update = true;
+	}
+
 	if (!update_when_invisible && !is_visible_in_tree()) {
 		return;
 	}
@@ -903,13 +917,6 @@ void SceneTreeEditor::_update_tree(bool p_scroll_to_selected) {
 	updating_tree = true;
 
 	last_hash = hash_djb2_one_64(0);
-	Node *scene_node = get_scene_node();
-
-	if (node_cache.current_scene_node != scene_node) {
-		_reset();
-		node_cache.current_scene_node = scene_node;
-		node_cache.force_update = true;
-	}
 
 	if (node_cache.current_scene_node) {
 		// Handle pinning/unpinning the animation player only do this once per iteration.
@@ -917,12 +924,19 @@ void SceneTreeEditor::_update_tree(bool p_scroll_to_selected) {
 		// If pinned state changed, update the currently pinned node.
 		if (AnimationPlayerEditor::get_singleton()->is_pinned() != node_cache.current_has_pin) {
 			node_cache.current_has_pin = AnimationPlayerEditor::get_singleton()->is_pinned();
-			node_cache.mark_dirty(pinned_node);
+			if (node_cache.has(pinned_node)) {
+				node_cache.mark_dirty(pinned_node);
+			}
 		}
 		// If the current pinned node changed update both the old and new node.
 		if (node_cache.current_pinned_node != pinned_node) {
-			node_cache.mark_dirty(pinned_node);
-			node_cache.mark_dirty(node_cache.current_pinned_node);
+			// get_editing_node() will return deleted nodes. If the nodes are not in cache don't try to mark them.
+			if (node_cache.has(pinned_node)) {
+				node_cache.mark_dirty(pinned_node);
+			}
+			if (node_cache.has(node_cache.current_pinned_node)) {
+				node_cache.mark_dirty(node_cache.current_pinned_node);
+			}
 			node_cache.current_pinned_node = pinned_node;
 		}
 
@@ -952,47 +966,60 @@ bool SceneTreeEditor::_update_filter(TreeItem *p_parent, bool p_scroll_to_select
 		return false;
 	}
 
+	// Now find other reasons to keep this Node, too.
+	PackedStringArray terms = filter.to_lower().split_spaces();
+	bool keep = _item_matches_all_terms(p_parent, terms);
+
+	bool selectable = keep;
+	bool is_root = p_parent == tree->get_root();
+
+	if (keep) {
+		Node *n = get_node(p_parent->get_metadata(0));
+		if (!p_parent->is_visible() || (is_root && tree->is_root_hidden())) {
+			// Place back moved out children from when this item has hidden.
+			HashMap<Node *, CachedNode>::Iterator I = node_cache.get(n, false);
+			if (I && I->value.has_moved_children) {
+				_update_node_subtree(I->value.node, nullptr, true);
+			}
+		}
+
+		if (!valid_types.is_empty()) {
+			selectable = false;
+			for (const StringName &E : valid_types) {
+				if (n->is_class(E) ||
+						EditorNode::get_singleton()->is_object_of_custom_type(n, E)) {
+					selectable = true;
+					break;
+				} else {
+					Ref<Script> node_script = n->get_script();
+					while (node_script.is_valid()) {
+						if (node_script->get_path() == E) {
+							selectable = true;
+							break;
+						}
+						node_script = node_script->get_base_script();
+					}
+					if (selectable) {
+						break;
+					}
+				}
+			}
+		}
+	}
+
 	bool keep_for_children = false;
 	for (TreeItem *child = p_parent->get_first_child(); child; child = child->get_next()) {
 		// Always keep if at least one of the children are kept.
 		keep_for_children = _update_filter(child, p_scroll_to_selected) || keep_for_children;
 	}
 
-	// Now find other reasons to keep this Node, too.
-	PackedStringArray terms = filter.to_lower().split_spaces();
-	bool keep = _item_matches_all_terms(p_parent, terms);
-
-	bool selectable = keep;
-	if (keep && !valid_types.is_empty()) {
-		selectable = false;
-		Node *n = get_node(p_parent->get_metadata(0));
-
-		for (const StringName &E : valid_types) {
-			if (n->is_class(E) ||
-					EditorNode::get_singleton()->is_object_of_custom_type(n, E)) {
-				selectable = true;
-				break;
-			} else {
-				Ref<Script> node_script = n->get_script();
-				while (node_script.is_valid()) {
-					if (node_script->get_path() == E) {
-						selectable = true;
-						break;
-					}
-					node_script = node_script->get_base_script();
-				}
-				if (selectable) {
-					break;
-				}
-			}
+	if (!is_root) {
+		if (show_all_nodes) {
+			p_parent->set_visible(keep_for_children || keep);
+		} else {
+			// Show only selectable nodes, or parents of selectable.
+			p_parent->set_visible(keep_for_children || selectable);
 		}
-	}
-
-	if (show_all_nodes) {
-		p_parent->set_visible(keep_for_children || keep);
-	} else {
-		// Show only selectable nodes, or parents of selectable.
-		p_parent->set_visible(keep_for_children || selectable);
 	}
 
 	if (selectable) {
@@ -1002,24 +1029,67 @@ bool SceneTreeEditor::_update_filter(TreeItem *p_parent, bool p_scroll_to_select
 		} else {
 			p_parent->set_custom_color(0, custom_color);
 		}
+
 		p_parent->set_selectable(0, true);
 	} else if (keep_for_children) {
-		p_parent->set_custom_color(0, get_theme_color(SNAME("font_disabled_color"), EditorStringName(Editor)));
-		p_parent->set_selectable(0, false);
-		p_parent->deselect(0);
+		p_parent->set_visible(!hide_filtered_out_parents || is_root);
+
+		if (!p_parent->is_visible()) {
+			TreeItem *filtered_parent = p_parent->get_parent();
+			while (filtered_parent) {
+				if (filtered_parent == tree->get_root() || (filtered_parent->is_selectable(0) && filtered_parent->is_visible())) {
+					break;
+				}
+				filtered_parent = filtered_parent->get_parent();
+			}
+
+			if (filtered_parent) {
+				for (Variant &item : p_parent->get_children()) {
+					TreeItem *ti = Object::cast_to<TreeItem>(item);
+					bool is_selected = ti->is_selected(0);
+
+					p_parent->remove_child(ti);
+					filtered_parent->add_child(ti);
+					TreeItem *prev = p_parent->get_prev();
+					if (prev) {
+						ti->move_after(prev);
+					}
+
+					if (is_selected) {
+						ti->select(0);
+					}
+
+					HashMap<Node *, CachedNode>::Iterator I = node_cache.get(get_node(p_parent->get_metadata(0)), false);
+					if (I) {
+						I->value.has_moved_children = true;
+					}
+				}
+
+				return false;
+			}
+		} else {
+			p_parent->set_custom_color(0, get_theme_color(SNAME("font_disabled_color"), EditorStringName(Editor)));
+			p_parent->set_selectable(0, false);
+			p_parent->deselect(0);
+		}
+	}
+	if (is_root) {
+		tree->set_hide_root(hide_filtered_out_parents && !selectable);
+		if (tree->is_root_hidden()) {
+			p_parent->set_collapsed(false);
+		}
 	}
 
 	if (editor_selection) {
 		Node *n = get_node(p_parent->get_metadata(0));
 		if (selectable) {
 			if (p_scroll_to_selected && n && editor_selection->is_selected(n)) {
-				tree->scroll_to_item(p_parent);
+				// Needs to be deferred to account for possible root visibility change.
+				callable_mp(tree, &Tree::scroll_to_item).call_deferred(p_parent, false);
 			}
-		} else {
-			if (n && p_parent->is_selected(0)) {
-				editor_selection->remove_node(n);
-				p_parent->deselect(0);
-			}
+		} else if (n && p_parent->is_selected(0)) {
+			editor_selection->remove_node(n);
+			p_parent->deselect(0);
 		}
 	}
 
@@ -1107,6 +1177,9 @@ void SceneTreeEditor::_compute_hash(Node *p_node, uint64_t &hash) {
 }
 
 void SceneTreeEditor::_reset() {
+	// Stop any waiting change to tooltip.
+	update_node_tooltip_delay->stop();
+
 	tree->clear();
 	node_cache.clear();
 }
@@ -1376,9 +1449,32 @@ void SceneTreeEditor::rename_node(Node *p_node, const String &p_name, TreeItem *
 		item = _find(tree->get_root(), p_node->get_path());
 	}
 	ERR_FAIL_NULL(item);
-	String new_name = p_name.validate_node_name();
+	bool check_for_unique_name_token = !p_name.is_empty() && p_name[0] == '%';
+	String substr_name = p_name;
 
-	if (new_name != p_name) {
+	if (check_for_unique_name_token) {
+		substr_name = p_name.substr(1);
+
+		// No need to do anything else with this if already unique.
+		if (p_node->is_unique_name_in_owner()) {
+			check_for_unique_name_token = false;
+			// Do not set scene root as unique.
+		} else if (get_tree()->get_edited_scene_root() == p_node) {
+			check_for_unique_name_token = false;
+			String text = TTR("Root nodes cannot be accessed as unique names in their own scene. Instantiate in another scene and set as unique name there.");
+			if (error->is_visible()) {
+				error->set_text(error->get_text() + "\n\n" + text);
+			} else {
+				error->set_text(text);
+				error->popup_centered();
+			}
+		}
+	}
+
+	String new_name = substr_name.validate_node_name();
+
+	// If p_name only has "%" at the beginning and no other invalid characters, do not error.
+	if (new_name != substr_name) {
 		String text = TTR("Invalid node name, the following characters are not allowed:") + "\n" + String::get_invalid_node_name_characters();
 		if (error->is_visible()) {
 			if (!error->get_meta("invalid_character", false)) {
@@ -1419,12 +1515,16 @@ void SceneTreeEditor::rename_node(Node *p_node, const String &p_name, TreeItem *
 	new_name = p_node->get_parent()->prevalidate_child_name(p_node, new_name);
 	if (new_name == p_node->get_name()) {
 		item->set_text(0, new_name);
-		return;
+		// If setting name as unique, check for existing unique node below first.
+		if (!check_for_unique_name_token) {
+			return;
+		}
 	}
 
 	// We previously made sure name is not the same as current name
 	// so that it won't complain about already used unique name when not changing name.
-	if (p_node->is_unique_name_in_owner() && get_tree()->get_edited_scene_root()->get_node_or_null("%" + new_name)) {
+	if ((check_for_unique_name_token || p_node->is_unique_name_in_owner()) && get_tree()->get_edited_scene_root()->get_node_or_null("%" + new_name)) {
+		check_for_unique_name_token = false;
 		String text = vformat(TTR("A node with the unique name %s already exists in this scene."), new_name);
 		if (error->is_visible()) {
 			if (!error->get_meta("same_unique_name", false)) {
@@ -1438,16 +1538,42 @@ void SceneTreeEditor::rename_node(Node *p_node, const String &p_name, TreeItem *
 			error->popup_centered();
 		}
 		item->set_text(0, p_node->get_name());
+		if (p_node->is_unique_name_in_owner()) {
+			return;
+		}
+	}
+
+	// If same name and check_for_unique_name_token is still true, now set as unique.
+	// This is separate from final action so "Rename Node" is not added to undo history.
+	if (new_name == p_node->get_name()) {
+		if (check_for_unique_name_token) {
+			if (!is_scene_tree_dock) {
+				p_node->set_unique_name_in_owner(true);
+			} else {
+				EditorUndoRedoManager *undo_redo = EditorUndoRedoManager::get_singleton();
+				undo_redo->create_action(TTR("Enable Scene Unique Name(s)"));
+				undo_redo->add_undo_method(p_node, "set_unique_name_in_owner", false);
+				undo_redo->add_do_method(p_node, "set_unique_name_in_owner", true);
+				undo_redo->commit_action();
+			}
+		}
 		return;
 	}
 
 	if (!is_scene_tree_dock) {
 		p_node->set_name(new_name);
+		if (check_for_unique_name_token) {
+			p_node->set_unique_name_in_owner(true);
+		}
 		item->set_metadata(0, p_node->get_path());
 		emit_signal(SNAME("node_renamed"));
 	} else {
 		EditorUndoRedoManager *undo_redo = EditorUndoRedoManager::get_singleton();
 		undo_redo->create_action(TTR("Rename Node"), UndoRedo::MERGE_DISABLE, p_node);
+
+		if (check_for_unique_name_token) {
+			undo_redo->add_undo_method(p_node, "set_unique_name_in_owner", false);
+		}
 
 		emit_signal(SNAME("node_prerename"), p_node, new_name);
 
@@ -1455,10 +1581,13 @@ void SceneTreeEditor::rename_node(Node *p_node, const String &p_name, TreeItem *
 		undo_redo->add_undo_method(item, "set_metadata", 0, p_node->get_path());
 		undo_redo->add_undo_method(item, "set_text", 0, p_node->get_name());
 
-		p_node->set_name(new_name);
 		undo_redo->add_do_method(p_node, "set_name", new_name);
 		undo_redo->add_do_method(item, "set_metadata", 0, p_node->get_path());
 		undo_redo->add_do_method(item, "set_text", 0, new_name);
+
+		if (check_for_unique_name_token) {
+			undo_redo->add_do_method(p_node, "set_unique_name_in_owner", true);
+		}
 
 		undo_redo->commit_action();
 	}
@@ -1889,19 +2018,37 @@ void SceneTreeEditor::set_auto_expand_selected(bool p_auto, bool p_update_settin
 	auto_expand_selected = p_auto;
 }
 
+void SceneTreeEditor::set_hide_filtered_out_parents(bool p_hide, bool p_update_settings) {
+	if (p_hide == hide_filtered_out_parents) {
+		return;
+	}
+
+	if (p_update_settings) {
+		EditorSettings::get_singleton()->set("docks/scene_tree/hide_filtered_out_parents", p_hide);
+	}
+	hide_filtered_out_parents = p_hide;
+
+	if (hide_filtered_out_parents) {
+		_update_filter();
+	} else {
+		node_cache.force_update = true;
+		_update_tree();
+	}
+}
+
 void SceneTreeEditor::set_connect_to_script_mode(bool p_enable) {
 	connect_to_script_mode = p_enable;
-	update_tree();
+	_update_tree();
 }
 
 void SceneTreeEditor::set_connecting_signal(bool p_enable) {
 	connecting_signal = p_enable;
-	update_tree();
+	_update_tree();
 }
 
 void SceneTreeEditor::set_update_when_invisible(bool p_enable) {
 	update_when_invisible = p_enable;
-	update_tree();
+	_update_tree();
 }
 
 void SceneTreeEditor::_bind_methods() {
@@ -2233,6 +2380,10 @@ HashMap<Node *, SceneTreeEditor::CachedNode>::Iterator SceneTreeEditor::NodeCach
 	return I;
 }
 
+bool SceneTreeEditor::NodeCache::has(Node *p_node) {
+	return get(p_node, false).operator bool();
+}
+
 void SceneTreeEditor::NodeCache::remove(Node *p_node, bool p_recursive) {
 	if (!p_node) {
 		return;
@@ -2240,6 +2391,11 @@ void SceneTreeEditor::NodeCache::remove(Node *p_node, bool p_recursive) {
 
 	if (p_node == editor->selected) {
 		editor->selected = nullptr;
+	}
+
+	if (p_node == current_pinned_node) {
+		current_pinned_node = nullptr;
+		current_has_pin = false;
 	}
 
 	editor->marked.erase(p_node);
@@ -2279,6 +2435,7 @@ void SceneTreeEditor::NodeCache::mark_dirty(Node *p_node, bool p_parents) {
 		if (!p_parents) {
 			break;
 		}
+
 		node = node->get_parent();
 	}
 }
@@ -2343,4 +2500,6 @@ void SceneTreeEditor::NodeCache::clear() {
 	}
 	cache.clear();
 	to_delete.clear();
+	current_pinned_node = nullptr;
+	current_has_pin = false;
 }

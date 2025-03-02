@@ -482,6 +482,11 @@ void SceneTree::set_physics_interpolation_enabled(bool p_enabled) {
 
 	_physics_interpolation_enabled = p_enabled;
 	RenderingServer::get_singleton()->set_physics_interpolation_enabled(p_enabled);
+
+	// Perform an auto reset on the root node for convenience for the user.
+	if (root) {
+		root->reset_physics_interpolation();
+	}
 }
 
 bool SceneTree::is_physics_interpolation_enabled() const {
@@ -506,13 +511,6 @@ void SceneTree::iteration_prepare() {
 		// are flushed before pumping the interpolation prev and currents.
 		flush_transform_notifications();
 		RenderingServer::get_singleton()->tick();
-
-#ifndef _3D_DISABLED
-		// Any objects performing client physics interpolation
-		// should be given an opportunity to keep their previous transforms
-		// up to date before each new physics tick.
-		_client_physics_interpolation.physics_process();
-#endif
 	}
 }
 
@@ -536,11 +534,11 @@ bool SceneTree::physics_process(double p_time) {
 	MessageQueue::get_singleton()->flush(); //small little hack
 
 	process_timers(p_time, true); //go through timers
-
 	process_tweens(p_time, true);
 
 	flush_transform_notifications();
 
+	// This should happen last because any processing that deletes something beforehand might expect the object to be removed in the same frame.
 	_flush_delete_queue();
 	_call_idle_callbacks();
 
@@ -552,6 +550,13 @@ void SceneTree::iteration_end() {
 	// to be flushed to the RenderingServer before finishing a physics tick.
 	if (_physics_interpolation_enabled) {
 		flush_transform_notifications();
+
+#ifndef _3D_DISABLED
+		// Any objects performing client physics interpolation
+		// should be given an opportunity to keep their previous transforms
+		// up to date.
+		_client_physics_interpolation.physics_process();
+#endif
 	}
 }
 
@@ -581,17 +586,17 @@ bool SceneTree::process(double p_time) {
 	MessageQueue::get_singleton()->flush(); //small little hack
 	flush_transform_notifications(); //transforms after world update, to avoid unnecessary enter/exit notifications
 
-	_flush_delete_queue();
-
 	if (unlikely(pending_new_scene)) {
 		_flush_scene_change();
 	}
 
 	process_timers(p_time, false); //go through timers
-
 	process_tweens(p_time, false);
 
-	flush_transform_notifications(); //additional transforms after timers update
+	flush_transform_notifications(); // Additional transforms after timers update.
+
+	// This should happen last because any processing that deletes something beforehand might expect the object to be removed in the same frame.
+	_flush_delete_queue();
 
 	_call_idle_callbacks();
 
@@ -644,32 +649,31 @@ bool SceneTree::process(double p_time) {
 
 void SceneTree::process_timers(double p_delta, bool p_physics_frame) {
 	_THREAD_SAFE_METHOD_
-	List<Ref<SceneTreeTimer>>::Element *L = timers.back(); //last element
+	const List<Ref<SceneTreeTimer>>::Element *L = timers.back(); // Last element.
+	const double unscaled_delta = Engine::get_singleton()->get_process_step();
 
 	for (List<Ref<SceneTreeTimer>>::Element *E = timers.front(); E;) {
 		List<Ref<SceneTreeTimer>>::Element *N = E->next();
-		if ((paused && !E->get()->is_process_always()) || (E->get()->is_process_in_physics() != p_physics_frame)) {
+		Ref<SceneTreeTimer> timer = E->get();
+
+		if ((paused && !timer->is_process_always()) || (timer->is_process_in_physics() != p_physics_frame)) {
 			if (E == L) {
-				break; //break on last, so if new timers were added during list traversal, ignore them.
+				break; // Break on last, so if new timers were added during list traversal, ignore them.
 			}
 			E = N;
 			continue;
 		}
 
-		double time_left = E->get()->get_time_left();
-		if (E->get()->is_ignoring_time_scale()) {
-			time_left -= Engine::get_singleton()->get_process_step();
-		} else {
-			time_left -= p_delta;
-		}
-		E->get()->set_time_left(time_left);
+		double time_left = timer->get_time_left();
+		time_left -= timer->is_ignoring_time_scale() ? unscaled_delta : p_delta;
+		timer->set_time_left(time_left);
 
 		if (time_left <= 0) {
 			E->get()->emit_signal(SNAME("timeout"));
 			timers.erase(E);
 		}
 		if (E == L) {
-			break; //break on last, so if new timers were added during list traversal, ignore them.
+			break; // Break on last, so if new timers were added during list traversal, ignore them.
 		}
 		E = N;
 	}
@@ -678,12 +682,15 @@ void SceneTree::process_timers(double p_delta, bool p_physics_frame) {
 void SceneTree::process_tweens(double p_delta, bool p_physics) {
 	_THREAD_SAFE_METHOD_
 	// This methods works similarly to how SceneTreeTimers are handled.
-	List<Ref<Tween>>::Element *L = tweens.back();
+	const List<Ref<Tween>>::Element *L = tweens.back();
+	const double unscaled_delta = Engine::get_singleton()->get_process_step();
 
 	for (List<Ref<Tween>>::Element *E = tweens.front(); E;) {
 		List<Ref<Tween>>::Element *N = E->next();
+		Ref<Tween> &tween = E->get();
+
 		// Don't process if paused or process mode doesn't match.
-		if (!E->get()->can_process(paused) || (p_physics == (E->get()->get_process_mode() == Tween::TWEEN_PROCESS_IDLE))) {
+		if (!tween->can_process(paused) || (p_physics == (tween->get_process_mode() == Tween::TWEEN_PROCESS_IDLE))) {
 			if (E == L) {
 				break;
 			}
@@ -691,9 +698,8 @@ void SceneTree::process_tweens(double p_delta, bool p_physics) {
 			continue;
 		}
 
-		double time_step = E->get()->is_ignoring_time_scale() ? Engine::get_singleton()->get_process_step() : p_delta;
-		if (!E->get()->step(time_step)) {
-			E->get()->clear();
+		if (!tween->step(tween->is_ignoring_time_scale() ? unscaled_delta : p_delta)) {
+			tween->clear();
 			tweens.erase(E);
 		}
 		if (E == L) {
@@ -1583,9 +1589,20 @@ Ref<SceneTreeTimer> SceneTree::create_timer(double p_delay_sec, bool p_process_a
 
 Ref<Tween> SceneTree::create_tween() {
 	_THREAD_SAFE_METHOD_
-	Ref<Tween> tween = memnew(Tween(true));
+	Ref<Tween> tween;
+	tween.instantiate(this);
 	tweens.push_back(tween);
 	return tween;
+}
+
+void SceneTree::remove_tween(const Ref<Tween> &p_tween) {
+	_THREAD_SAFE_METHOD_
+	for (List<Ref<Tween>>::Element *E = tweens.back(); E; E = E->prev()) {
+		if (E->get() == p_tween) {
+			E->erase();
+			break;
+		}
+	}
 }
 
 TypedArray<Tween> SceneTree::get_processed_tweens() {
@@ -1871,16 +1888,16 @@ SceneTree::SceneTree() {
 	root->set_as_audio_listener_2d(true);
 	current_scene = nullptr;
 
-	const int msaa_mode_2d = GLOBAL_DEF_BASIC(PropertyInfo(Variant::INT, "rendering/anti_aliasing/quality/msaa_2d", PROPERTY_HINT_ENUM, String::utf8("Disabled (Fastest),2× (Average),4× (Slow),8× (Slowest)")), 0);
+	const int msaa_mode_2d = GLOBAL_GET("rendering/anti_aliasing/quality/msaa_2d");
 	root->set_msaa_2d(Viewport::MSAA(msaa_mode_2d));
 
-	const int msaa_mode_3d = GLOBAL_DEF_BASIC(PropertyInfo(Variant::INT, "rendering/anti_aliasing/quality/msaa_3d", PROPERTY_HINT_ENUM, String::utf8("Disabled (Fastest),2× (Average),4× (Slow),8× (Slowest)")), 0);
+	const int msaa_mode_3d = GLOBAL_GET("rendering/anti_aliasing/quality/msaa_3d");
 	root->set_msaa_3d(Viewport::MSAA(msaa_mode_3d));
 
 	const bool transparent_background = GLOBAL_DEF("rendering/viewport/transparent_background", false);
 	root->set_transparent_background(transparent_background);
 
-	const bool use_hdr_2d = GLOBAL_DEF_RST_BASIC("rendering/viewport/hdr_2d", false);
+	const bool use_hdr_2d = GLOBAL_GET("rendering/viewport/hdr_2d");
 	root->set_use_hdr_2d(use_hdr_2d);
 
 	const int ssaa_mode = GLOBAL_DEF_BASIC(PropertyInfo(Variant::INT, "rendering/anti_aliasing/quality/screen_space_aa", PROPERTY_HINT_ENUM, "Disabled (Fastest),FXAA (Fast)"), 0);
@@ -1924,7 +1941,7 @@ SceneTree::SceneTree() {
 
 	int shadowmap_size = GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/lights_and_shadows/positional_shadow/atlas_size", PROPERTY_HINT_RANGE, "256,16384"), 4096);
 	GLOBAL_DEF("rendering/lights_and_shadows/positional_shadow/atlas_size.mobile", 2048);
-	bool shadowmap_16_bits = GLOBAL_DEF("rendering/lights_and_shadows/positional_shadow/atlas_16_bits", true);
+	bool shadowmap_16_bits = GLOBAL_GET("rendering/lights_and_shadows/positional_shadow/atlas_16_bits");
 	int atlas_q0 = GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/lights_and_shadows/positional_shadow/atlas_quadrant_0_subdiv", PROPERTY_HINT_ENUM, "Disabled,1 Shadow,4 Shadows,16 Shadows,64 Shadows,256 Shadows,1024 Shadows"), 2);
 	int atlas_q1 = GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/lights_and_shadows/positional_shadow/atlas_quadrant_1_subdiv", PROPERTY_HINT_ENUM, "Disabled,1 Shadow,4 Shadows,16 Shadows,64 Shadows,256 Shadows,1024 Shadows"), 2);
 	int atlas_q2 = GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/lights_and_shadows/positional_shadow/atlas_quadrant_2_subdiv", PROPERTY_HINT_ENUM, "Disabled,1 Shadow,4 Shadows,16 Shadows,64 Shadows,256 Shadows,1024 Shadows"), 3);

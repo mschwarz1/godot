@@ -33,10 +33,12 @@
 
 #include "core/templates/oa_hash_map.h"
 #include "scene/gui/dialogs.h"
+#include "scene/gui/margin_container.h"
 
 class Button;
 class CenterContainer;
 class CheckButton;
+class ConfigFile;
 class EditorFileSystemDirectory;
 class LineEdit;
 class HFlowContainer;
@@ -123,6 +125,7 @@ private:
 
 	bool showing_history = false;
 	bool never_opened = true;
+	Ref<ConfigFile> history_file;
 
 	QuickOpenDisplayMode content_display_mode = QuickOpenDisplayMode::LIST;
 	Vector<QuickOpenResultItem *> result_items;
@@ -169,11 +172,13 @@ private:
 	void _toggle_fuzzy_search(bool p_pressed);
 	void _menu_option(int p_option);
 
+	String _get_cache_file_path() const;
+
 	static void _bind_methods();
 };
 
-class QuickOpenResultGridItem : public VBoxContainer {
-	GDCLASS(QuickOpenResultGridItem, VBoxContainer)
+class QuickOpenResultGridItem : public MarginContainer {
+	GDCLASS(QuickOpenResultGridItem, MarginContainer)
 
 public:
 	QuickOpenResultGridItem();
@@ -184,12 +189,13 @@ public:
 	void remove_highlight();
 
 private:
+	VBoxContainer *vbc = nullptr;
 	TextureRect *thumbnail = nullptr;
 	HighlightedLabel *name = nullptr;
 };
 
-class QuickOpenResultListItem : public HBoxContainer {
-	GDCLASS(QuickOpenResultListItem, HBoxContainer)
+class QuickOpenResultListItem : public MarginContainer {
+	GDCLASS(QuickOpenResultListItem, MarginContainer)
 
 public:
 	QuickOpenResultListItem();
@@ -203,9 +209,7 @@ protected:
 	void _notification(int p_what);
 
 private:
-	static const int CONTAINER_MARGIN = 8;
-
-	MarginContainer *image_container = nullptr;
+	HBoxContainer *hbc = nullptr;
 	VBoxContainer *text_container = nullptr;
 
 	TextureRect *thumbnail = nullptr;

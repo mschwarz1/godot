@@ -316,6 +316,7 @@ Ref<Resource> InspectorDock::_get_current_resource() const {
 
 void InspectorDock::_prepare_history() {
 	EditorSelectionHistory *editor_history = EditorNode::get_singleton()->get_editor_selection_history();
+	editor_history->cleanup_history();
 
 	int history_to = MAX(0, editor_history->get_history_len() - 25);
 
@@ -505,6 +506,7 @@ void InspectorDock::clear() {
 
 void InspectorDock::update(Object *p_object) {
 	EditorSelectionHistory *editor_history = EditorNode::get_singleton()->get_editor_selection_history();
+
 	backward_button->set_disabled(editor_history->is_at_beginning());
 	forward_button->set_disabled(editor_history->is_at_end());
 
@@ -748,7 +750,6 @@ InspectorDock::InspectorDock(EditorData &p_editor_data) {
 	object_menu = memnew(MenuButton);
 	object_menu->set_flat(false);
 	object_menu->set_theme_type_variation("FlatMenuButton");
-	object_menu->set_shortcut_context(this);
 	property_tools_hb->add_child(object_menu);
 	object_menu->set_tooltip_text(TTR("Manage object properties."));
 	object_menu->get_popup()->connect("about_to_popup", callable_mp(this, &InspectorDock::_prepare_menu));
