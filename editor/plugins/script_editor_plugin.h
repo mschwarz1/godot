@@ -28,8 +28,7 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
 /**************************************************************************/
 
-#ifndef SCRIPT_EDITOR_PLUGIN_H
-#define SCRIPT_EDITOR_PLUGIN_H
+#pragma once
 
 #include "core/object/script_language.h"
 #include "editor/plugins/editor_plugin.h"
@@ -210,7 +209,7 @@ public:
 	virtual void update_settings() = 0;
 	virtual void set_debugger_active(bool p_active) = 0;
 	virtual bool can_lose_focus_on_node_selection() { return true; }
-	virtual void update_toggle_scripts_button() {}
+	virtual void update_toggle_files_button() {}
 
 	virtual bool show_members_overview() = 0;
 
@@ -223,8 +222,6 @@ public:
 	virtual CodeTextEditor *get_code_editor() const = 0;
 
 	virtual void validate() = 0;
-
-	ScriptEditorBase() {}
 };
 
 typedef ScriptEditorBase *(*CreateScriptEditorFunc)(const Ref<Resource> &p_resource);
@@ -255,7 +252,7 @@ class ScriptEditor : public PanelContainer {
 		CLOSE_DOCS,
 		CLOSE_ALL,
 		CLOSE_OTHER_TABS,
-		TOGGLE_SCRIPTS_PANEL,
+		TOGGLE_FILES_PANEL,
 		SHOW_IN_FILE_SYSTEM,
 		FILE_COPY_PATH,
 		FILE_COPY_UID,
@@ -548,8 +545,8 @@ protected:
 public:
 	static ScriptEditor *get_singleton() { return script_editor; }
 
-	bool toggle_scripts_panel();
-	bool is_scripts_panel_toggled();
+	bool toggle_files_panel();
+	bool is_files_panel_toggled();
 	void apply_scripts() const;
 	void reload_scripts(bool p_refresh_only = false);
 	void open_script_create_dialog(const String &p_base_name, const String &p_base_path);
@@ -569,6 +566,7 @@ public:
 	PackedStringArray get_unsaved_scripts() const;
 	void save_current_script();
 	void save_all_scripts();
+	void update_script_times();
 
 	void set_window_layout(Ref<ConfigFile> p_layout);
 	void get_window_layout(Ref<ConfigFile> p_layout);
@@ -623,7 +621,7 @@ protected:
 	void _notification(int p_what);
 
 public:
-	virtual String get_plugin_name() const override { return "Script"; }
+	virtual String get_plugin_name() const override { return TTRC("Script"); }
 	bool has_main_screen() const override { return true; }
 	virtual void edit(Object *p_object) override;
 	virtual bool handles(Object *p_object) const override;
@@ -642,7 +640,4 @@ public:
 	virtual void edited_scene_changed() override;
 
 	ScriptEditorPlugin();
-	~ScriptEditorPlugin();
 };
-
-#endif // SCRIPT_EDITOR_PLUGIN_H

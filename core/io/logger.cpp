@@ -36,10 +36,9 @@
 #include "core/templates/rb_set.h"
 
 #include "modules/modules_enabled.gen.h" // For regex.
+
 #ifdef MODULE_REGEX_ENABLED
 #include "modules/regex/regex.h"
-#else
-class RegEx : public RefCounted {};
 #endif // MODULE_REGEX_ENABLED
 
 #if defined(MINGW_ENABLED) || defined(_MSC_VER)
@@ -156,7 +155,7 @@ void RotatedFileLogger::rotate_file() {
 
 	if (FileAccess::exists(base_path)) {
 		if (max_files > 1) {
-			String timestamp = Time::get_singleton()->get_datetime_string_from_system().replace(":", ".");
+			String timestamp = Time::get_singleton()->get_datetime_string_from_system().replace_char(':', '.');
 			String backup_name = base_path.get_basename() + timestamp;
 			if (!base_path.get_extension().is_empty()) {
 				backup_name += "." + base_path.get_extension();

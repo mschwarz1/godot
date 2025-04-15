@@ -63,17 +63,23 @@ PackedStringArray SceneTreeEditor::_get_node_configuration_warnings(Node *p_node
 		if (node_2d) {
 			// Note: Warn for Node2D but not all CanvasItems, don't warn for Control nodes.
 			// Control nodes may have reasons to use a transformed root node like anchors.
-			if (!node_2d->get_transform().is_equal_approx(Transform2D())) {
+			if (!node_2d->get_position().is_zero_approx()) {
 				warnings.append(TTR("The root node of a scene is recommended to not be transformed, since instances of the scene will usually override this. Reset the transform and reload the scene to remove this warning."));
 			}
 		}
 		Node3D *node_3d = Object::cast_to<Node3D>(p_node);
 		if (node_3d) {
-			if (!node_3d->get_transform().is_equal_approx(Transform3D())) {
+			if (!node_3d->get_position().is_zero_approx()) {
 				warnings.append(TTR("The root node of a scene is recommended to not be transformed, since instances of the scene will usually override this. Reset the transform and reload the scene to remove this warning."));
 			}
 		}
 	}
+	return warnings;
+}
+
+PackedStringArray SceneTreeEditor::_get_node_accessibility_configuration_warnings(Node *p_node) {
+	PackedStringArray warnings = p_node->get_accessibility_configuration_warnings();
+
 	return warnings;
 }
 
@@ -112,7 +118,7 @@ void SceneTreeEditor::_cell_button_pressed(Object *p_item, int p_column, int p_i
 	} else if (p_id == BUTTON_VISIBILITY) {
 		undo_redo->create_action(TTR("Toggle Visible"));
 		_toggle_visible(n);
-		List<Node *> selection = editor_selection->get_selected_node_list();
+		List<Node *> selection = editor_selection->get_top_selected_node_list();
 		if (selection.size() > 1 && selection.find(n) != nullptr) {
 			for (Node *nv : selection) {
 				ERR_FAIL_NULL(nv);
@@ -151,8 +157,10 @@ void SceneTreeEditor::_cell_button_pressed(Object *p_item, int p_column, int p_i
 		}
 		undo_redo->commit_action();
 	} else if (p_id == BUTTON_WARNING) {
-		const PackedStringArray warnings = _get_node_configuration_warnings(n);
-
+		PackedStringArray warnings = _get_node_configuration_warnings(n);
+		if (accessibility_warnings) {
+			warnings.append_array(_get_node_accessibility_configuration_warnings(n));
+		}
 		if (warnings.is_empty()) {
 			return;
 		}
@@ -447,7 +455,7 @@ void SceneTreeEditor::_update_node(Node *p_node, TreeItem *p_item, bool p_part_o
 			_set_item_custom_color(p_item, accent);
 		}
 	} else if (p_part_of_subscene) {
-		if (valid_types.size() == 0) {
+		if (valid_types.is_empty()) {
 			_set_item_custom_color(p_item, get_theme_color(SNAME("warning_color"), EditorStringName(Editor)));
 		}
 	} else if (marked.has(p_node)) {
@@ -473,7 +481,11 @@ void SceneTreeEditor::_update_node(Node *p_node, TreeItem *p_item, bool p_part_o
 	}
 
 	if (can_rename) { // TODO Should be can edit..
-		const PackedStringArray warnings = _get_node_configuration_warnings(p_node);
+		PackedStringArray warnings = _get_node_configuration_warnings(p_node);
+		if (accessibility_warnings) {
+			warnings.append_array(_get_node_accessibility_configuration_warnings(p_node));
+		}
+
 		const int num_warnings = warnings.size();
 		if (num_warnings > 0) {
 			StringName warning_icon;
@@ -512,8 +524,7 @@ void SceneTreeEditor::_update_node(Node *p_node, TreeItem *p_item, bool p_part_o
 
 		String msg_temp;
 		if (num_connections >= 1) {
-			Array arr;
-			arr.push_back(num_connections);
+			Array arr = { num_connections };
 			msg_temp += TTRN("Node has one connection.", "Node has {num} connections.", num_connections).format(arr, "{num}");
 			if (num_groups >= 1) {
 				msg_temp += "\n";
@@ -1291,7 +1302,7 @@ void SceneTreeEditor::_cell_multi_selected(Object *p_object, int p_cell, bool p_
 
 void SceneTreeEditor::_tree_scroll_to_item(ObjectID p_item_id) {
 	ERR_FAIL_NULL(tree);
-	TreeItem *item = Object::cast_to<TreeItem>(ObjectDB::get_instance(p_item_id));
+	TreeItem *item = ObjectDB::get_instance<TreeItem>(p_item_id);
 	if (item) {
 		tree->scroll_to_item(item, true);
 	}
@@ -1840,7 +1851,7 @@ Variant SceneTreeEditor::get_drag_data_fw(const Point2 &p_point, Control *p_from
 }
 
 bool SceneTreeEditor::_is_script_type(const StringName &p_type) const {
-	return (script_types->find(p_type));
+	return (script_types->has(p_type));
 }
 
 bool SceneTreeEditor::can_drop_data_fw(const Point2 &p_point, const Variant &p_data, Control *p_from) const {
@@ -1853,12 +1864,12 @@ bool SceneTreeEditor::can_drop_data_fw(const Point2 &p_point, const Variant &p_d
 		return false;
 	}
 
-	TreeItem *item = tree->get_item_at_position(p_point);
+	TreeItem *item = (p_point == Vector2(Math::INF, Math::INF)) ? tree->get_selected() : tree->get_item_at_position(p_point);
 	if (!item) {
 		return false;
 	}
 
-	int section = tree->get_drop_section_at_position(p_point);
+	int section = (p_point == Vector2(Math::INF, Math::INF)) ? tree->get_drop_section_at_position(tree->get_item_rect(item).position) : tree->get_drop_section_at_position(p_point);
 	if (section < -1 || (section == -1 && !item->get_parent())) {
 		return false;
 	}
@@ -1866,7 +1877,7 @@ bool SceneTreeEditor::can_drop_data_fw(const Point2 &p_point, const Variant &p_d
 	if (String(d["type"]) == "files") {
 		Vector<String> files = d["files"];
 
-		if (files.size() == 0) {
+		if (files.is_empty()) {
 			return false; // TODO Weird?
 		}
 
@@ -1942,11 +1953,11 @@ void SceneTreeEditor::drop_data_fw(const Point2 &p_point, const Variant &p_data,
 		return;
 	}
 
-	TreeItem *item = tree->get_item_at_position(p_point);
+	TreeItem *item = (p_point == Vector2(Math::INF, Math::INF)) ? tree->get_selected() : tree->get_item_at_position(p_point);
 	if (!item) {
 		return;
 	}
-	int section = tree->get_drop_section_at_position(p_point);
+	int section = (p_point == Vector2(Math::INF, Math::INF)) ? tree->get_drop_section_at_position(tree->get_item_rect(item).position) : tree->get_drop_section_at_position(p_point);
 	if (section < -1) {
 		return;
 	}
@@ -2034,6 +2045,13 @@ void SceneTreeEditor::set_hide_filtered_out_parents(bool p_hide, bool p_update_s
 		node_cache.force_update = true;
 		_update_tree();
 	}
+}
+
+void SceneTreeEditor::set_accessibility_warnings(bool p_enable, bool p_update_settings) {
+	if (p_update_settings) {
+		EditorSettings::get_singleton()->set("docks/scene_tree/accessibility_warnings", p_enable);
+	}
+	accessibility_warnings = p_enable;
 }
 
 void SceneTreeEditor::set_connect_to_script_mode(bool p_enable) {
@@ -2145,8 +2163,8 @@ SceneTreeEditor::SceneTreeEditor(bool p_label, bool p_can_rename, bool p_can_ope
 	ask_before_revoke_checkbox->set_tooltip_text(TTR("This dialog can also be enabled/disabled in the Editor Settings: Docks > Scene Tree > Ask Before Revoking Unique Name."));
 	vb->add_child(ask_before_revoke_checkbox);
 
-	script_types = memnew(List<StringName>);
-	ClassDB::get_inheriters_from_class("Script", script_types);
+	script_types = memnew(LocalVector<StringName>);
+	ClassDB::get_inheriters_from_class("Script", *script_types);
 }
 
 SceneTreeEditor::~SceneTreeEditor() {
@@ -2339,9 +2357,6 @@ SceneTreeDialog::SceneTreeDialog() {
 	// Disable the OK button when no node is selected.
 	get_ok_button()->set_disabled(!tree->get_selected());
 	tree->connect("node_selected", callable_mp(this, &SceneTreeDialog::_selected_changed));
-}
-
-SceneTreeDialog::~SceneTreeDialog() {
 }
 
 /******** CACHE *********/

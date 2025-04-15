@@ -1440,7 +1440,7 @@ void RendererCanvasCull::canvas_item_add_circle(RID p_item, const Point2 &p_pos,
 		// Store circle center in the last point.
 		points_ptr[circle_segments + 1] = p_pos;
 
-		const real_t circle_point_step = Math_TAU / circle_segments;
+		const real_t circle_point_step = Math::TAU / circle_segments;
 
 		for (int i = 0; i < circle_segments + 1; i++) {
 			float angle = i * circle_point_step;
@@ -1484,7 +1484,7 @@ void RendererCanvasCull::canvas_item_add_circle(RID p_item, const Point2 &p_pos,
 		points.resize(2 * circle_segments + 2);
 		colors.resize(2 * circle_segments + 2);
 
-		const real_t circle_point_step = Math_TAU / circle_segments;
+		const real_t circle_point_step = Math::TAU / circle_segments;
 
 		Vector2 *points_ptr = points.ptrw();
 		Color *colors_ptr = colors.ptrw();
@@ -1522,7 +1522,7 @@ void RendererCanvasCull::canvas_item_add_texture_rect(RID p_item, const Rect2 &p
 	if (p_tile) {
 		rect->flags |= RendererCanvasRender::CANVAS_RECT_TILE;
 		rect->flags |= RendererCanvasRender::CANVAS_RECT_REGION;
-		rect->source = Rect2(0, 0, ABS(p_rect.size.width), ABS(p_rect.size.height));
+		rect->source = Rect2(0, 0, Math::abs(p_rect.size.width), Math::abs(p_rect.size.height));
 	}
 
 	if (p_rect.size.x < 0) {

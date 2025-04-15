@@ -257,10 +257,10 @@ void ShaderMaterial::_get_property_list(List<PropertyInfo> *p_list) const {
 		bool is_none_group_undefined = true;
 		bool is_none_group = true;
 
-		for (List<PropertyInfo>::Element *E = list.front(); E; E = E->next()) {
-			if (E->get().usage == PROPERTY_USAGE_GROUP) {
-				if (!E->get().name.is_empty()) {
-					Vector<String> vgroup = E->get().name.split("::");
+		for (const PropertyInfo &pi : list) {
+			if (pi.usage == PROPERTY_USAGE_GROUP) {
+				if (!pi.name.is_empty()) {
+					Vector<String> vgroup = pi.name.split("::");
 					last_group = vgroup[0];
 					if (vgroup.size() > 1) {
 						last_subgroup = vgroup[1];
@@ -322,23 +322,23 @@ void ShaderMaterial::_get_property_list(List<PropertyInfo> *p_list) const {
 				vgroups.push_back(Pair<String, LocalVector<String>>("<None>", { "<None>" }));
 			}
 
-			const bool is_uniform_cached = param_cache.has(E->get().name);
+			const bool is_uniform_cached = param_cache.has(pi.name);
 			bool is_uniform_type_compatible = true;
 
 			if (is_uniform_cached) {
 				// Check if the uniform Variant type changed, for example vec3 to vec4.
-				const Variant &cached = param_cache.get(E->get().name);
+				const Variant &cached = param_cache.get(pi.name);
 
 				if (cached.is_array()) {
 					// Allow some array conversions for backwards compatibility.
-					is_uniform_type_compatible = Variant::can_convert(E->get().type, cached.get_type());
+					is_uniform_type_compatible = Variant::can_convert(pi.type, cached.get_type());
 				} else {
-					is_uniform_type_compatible = E->get().type == cached.get_type();
+					is_uniform_type_compatible = pi.type == cached.get_type();
 				}
 
 #ifndef DISABLE_DEPRECATED
 				// PackedFloat32Array -> PackedVector4Array conversion.
-				if (!is_uniform_type_compatible && E->get().type == Variant::PACKED_VECTOR4_ARRAY && cached.get_type() == Variant::PACKED_FLOAT32_ARRAY) {
+				if (!is_uniform_type_compatible && pi.type == Variant::PACKED_VECTOR4_ARRAY && cached.get_type() == Variant::PACKED_FLOAT32_ARRAY) {
 					PackedVector4Array varray;
 					PackedFloat32Array array = (PackedFloat32Array)cached;
 
@@ -346,28 +346,28 @@ void ShaderMaterial::_get_property_list(List<PropertyInfo> *p_list) const {
 						varray.push_back(Vector4(array[i], array[i + 1], array[i + 2], array[i + 3]));
 					}
 
-					param_cache.insert(E->get().name, varray);
+					param_cache.insert(pi.name, varray);
 					is_uniform_type_compatible = true;
 				}
 #endif
 
-				if (is_uniform_type_compatible && E->get().type == Variant::OBJECT && cached.get_type() == Variant::OBJECT) {
+				if (is_uniform_type_compatible && pi.type == Variant::OBJECT && cached.get_type() == Variant::OBJECT) {
 					// Check if the Object class (hint string) changed, for example Texture2D sampler to Texture3D.
 					// Allow inheritance, Texture2D type sampler should also accept CompressedTexture2D.
 					Object *cached_obj = cached;
-					if (!cached_obj->is_class(E->get().hint_string)) {
+					if (!cached_obj->is_class(pi.hint_string)) {
 						is_uniform_type_compatible = false;
 					}
 				}
 			}
 
-			PropertyInfo info = E->get();
+			PropertyInfo info = pi;
 			info.name = "shader_parameter/" + info.name;
 			if (!is_uniform_cached || !is_uniform_type_compatible) {
 				// Property has never been edited or its type changed, retrieve with default value.
-				Variant default_value = RenderingServer::get_singleton()->shader_get_parameter_default(shader->get_rid(), E->get().name);
-				param_cache.insert(E->get().name, default_value);
-				remap_cache.insert(info.name, E->get().name);
+				Variant default_value = RenderingServer::get_singleton()->shader_get_parameter_default(shader->get_rid(), pi.name);
+				param_cache.insert(pi.name, default_value);
+				remap_cache.insert(info.name, pi.name);
 			}
 			groups[last_group][last_subgroup].push_back(info);
 		}
@@ -376,8 +376,8 @@ void ShaderMaterial::_get_property_list(List<PropertyInfo> *p_list) const {
 			String group = group_pair.first;
 			for (const String &subgroup : group_pair.second) {
 				List<PropertyInfo> &prop_infos = groups[group][subgroup];
-				for (List<PropertyInfo>::Element *item = prop_infos.front(); item; item = item->next()) {
-					p_list->push_back(item->get());
+				for (const PropertyInfo &item : prop_infos) {
+					p_list->push_back(item);
 				}
 			}
 		}
@@ -684,28 +684,37 @@ void BaseMaterial3D::_update_shader() {
 		return; //no update required in the end
 	}
 
-	MutexLock lock(shader_map_mutex);
-	if (shader_map.has(current_key)) {
-		shader_map[current_key].users--;
-		if (shader_map[current_key].users == 0) {
-			// Deallocate shader which is no longer in use.
-			RS::get_singleton()->free(shader_map[current_key].shader);
-			shader_map.erase(current_key);
+	{
+		MutexLock lock(shader_map_mutex);
+		ShaderData *v = shader_map.getptr(current_key);
+		if (v) {
+			v->users--;
+			if (v->users == 0) {
+				// Deallocate shader which is no longer in use.
+				shader_rid = RID();
+				RS::get_singleton()->free(v->shader);
+				shader_map.erase(current_key);
+			}
+		}
+
+		current_key = mk;
+
+		v = shader_map.getptr(mk);
+		if (v) {
+			shader_rid = v->shader;
+			v->users++;
+
+			if (_get_material().is_valid()) {
+				RS::get_singleton()->material_set_shader(_get_material(), shader_rid);
+			}
+
+			return;
 		}
 	}
 
-	current_key = mk;
-
-	if (shader_map.has(mk)) {
-		shader_rid = shader_map[mk].shader;
-		shader_map[mk].users++;
-
-		if (_get_material().is_valid()) {
-			RS::get_singleton()->material_set_shader(_get_material(), shader_rid);
-		}
-
-		return;
-	}
+	// From this point, it is possible that multiple threads requesting the same key will
+	// race to create the shader. The winner, which is the one found in shader_map, will be
+	// used. The losers will free their shader.
 
 	String texfilter_str;
 	// Force linear filtering for the heightmap texture, as the heightmap effect
@@ -750,7 +759,7 @@ void BaseMaterial3D::_update_shader() {
 
 	// Add a comment to describe the shader origin (useful when converting to ShaderMaterial).
 	String code = vformat(
-			"// NOTE: Shader automatically converted from " VERSION_NAME " " VERSION_FULL_CONFIG "'s %s.\n\n",
+			"// NOTE: Shader automatically converted from " GODOT_VERSION_NAME " " GODOT_VERSION_FULL_CONFIG "'s %s.\n\n",
 			orm ? "ORMMaterial3D" : "StandardMaterial3D");
 
 	// Define shader type and render mode based on property values.
@@ -1929,11 +1938,28 @@ void fragment() {)";
 
 	code += "}\n";
 
-	ShaderData shader_data;
-	shader_data.shader = RS::get_singleton()->shader_create_from_code(code);
-	shader_data.users = 1;
-	shader_map[mk] = shader_data;
-	shader_rid = shader_data.shader;
+	// We must create the shader outside the shader_map_mutex to avoid potential deadlocks with
+	// other tasks in the WorkerThreadPool simultaneously creating materials, which
+	// may also hold the shared shader_map_mutex lock.
+	RID new_shader = RS::get_singleton()->shader_create_from_code(code);
+
+	MutexLock lock(shader_map_mutex);
+
+	ShaderData *v = shader_map.getptr(mk);
+	if (unlikely(v)) {
+		// We raced and managed to create the same key concurrently, so we'll free the shader we just created,
+		// given we know it isn't used, and use the winner.
+		RS::get_singleton()->free(new_shader);
+	} else {
+		ShaderData shader_data;
+		shader_data.shader = new_shader;
+		// ShaderData will be inserted with a users count of 0, but we
+		// increment unconditionally outside this if block, whilst still under lock.
+		v = &shader_map.insert(mk, shader_data)->value;
+	}
+
+	shader_rid = v->shader;
+	v->users++;
 
 	if (_get_material().is_valid()) {
 		RS::get_singleton()->material_set_shader(_get_material(), shader_rid);
@@ -1959,11 +1985,18 @@ void BaseMaterial3D::_check_material_rid() {
 }
 
 void BaseMaterial3D::flush_changes() {
-	MutexLock lock(material_mutex);
+	SelfList<BaseMaterial3D>::List copy;
+	{
+		MutexLock lock(material_mutex);
+		while (SelfList<BaseMaterial3D> *E = dirty_materials.first()) {
+			dirty_materials.remove(E);
+			copy.add(E);
+		}
+	}
 
-	while (dirty_materials.first()) {
-		dirty_materials.first()->self()->_update_shader();
-		dirty_materials.first()->remove_from_list();
+	while (SelfList<BaseMaterial3D> *E = copy.first()) {
+		E->self()->_update_shader();
+		copy.remove(E);
 	}
 }
 

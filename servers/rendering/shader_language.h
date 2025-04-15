@@ -28,8 +28,7 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
 /**************************************************************************/
 
-#ifndef SHADER_LANGUAGE_H
-#define SHADER_LANGUAGE_H
+#pragma once
 
 #include "core/object/script_language.h"
 #include "core/string/string_name.h"
@@ -177,6 +176,7 @@ public:
 		TK_HINT_ROUGHNESS_GRAY,
 		TK_HINT_ANISOTROPY_TEXTURE,
 		TK_HINT_SOURCE_COLOR,
+		TK_HINT_COLOR_CONVERSION_DISABLED,
 		TK_HINT_RANGE,
 		TK_HINT_ENUM,
 		TK_HINT_INSTANCE_INDEX,
@@ -662,6 +662,7 @@ public:
 				HINT_RANGE,
 				HINT_ENUM,
 				HINT_SOURCE_COLOR,
+				HINT_COLOR_CONVERSION_DISABLED,
 				HINT_NORMAL,
 				HINT_ROUGHNESS_NORMAL,
 				HINT_ROUGHNESS_R,
@@ -845,6 +846,7 @@ public:
 	static bool is_scalar_type(DataType p_type);
 	static bool is_float_type(DataType p_type);
 	static bool is_sampler_type(DataType p_type);
+	static bool is_hint_color(ShaderNode::Uniform::Hint p_hint);
 	static Variant constant_value_to_variant(const Vector<Scalar> &p_value, DataType p_type, int p_array_size, ShaderLanguage::ShaderNode::Uniform::Hint p_hint = ShaderLanguage::ShaderNode::Uniform::HINT_NONE);
 	static Variant get_default_datatype_value(DataType p_type, int p_array_size, ShaderLanguage::ShaderNode::Uniform::Hint p_hint);
 	static PropertyInfo uniform_to_property_info(const ShaderNode::Uniform &p_uniform);
@@ -1257,5 +1259,3 @@ public:
 	ShaderLanguage();
 	~ShaderLanguage();
 };
-
-#endif // SHADER_LANGUAGE_H

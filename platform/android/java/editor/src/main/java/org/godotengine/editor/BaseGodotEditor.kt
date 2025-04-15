@@ -37,7 +37,11 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.os.*
+import android.os.Build
+import android.os.Bundle
+import android.os.Debug
+import android.os.Environment
+import android.os.Process
 import android.preference.PreferenceManager
 import android.util.Log
 import android.view.View
@@ -138,6 +142,7 @@ abstract class BaseGodotEditor : GodotActivity(), GameMenuFragment.GameMenuListe
 		internal const val GAME_MENU_ACTION_RESET_CAMERA_2D_POSITION = "resetCamera2DPosition"
 		internal const val GAME_MENU_ACTION_RESET_CAMERA_3D_POSITION = "resetCamera3DPosition"
 		internal const val GAME_MENU_ACTION_EMBED_GAME_ON_PLAY = "embedGameOnPlay"
+		internal const val GAME_MENU_ACTION_SET_DEBUG_MUTE_AUDIO = "setDebugMuteAudio"
 
 		private const val GAME_WORKSPACE = "Game"
 
@@ -258,12 +263,14 @@ abstract class BaseGodotEditor : GodotActivity(), GameMenuFragment.GameMenuListe
 		super.onGodotSetupCompleted()
 		val longPressEnabled = enableLongPressGestures()
 		val panScaleEnabled = enablePanAndScaleGestures()
+		val overrideVolumeButtonsEnabled = overrideVolumeButtons()
 
 		runOnUiThread {
 			// Enable long press, panning and scaling gestures
 			godotFragment?.godot?.renderView?.inputHandler?.apply {
 				enableLongPress(longPressEnabled)
 				enablePanningAndScalingGestures(panScaleEnabled)
+				setOverrideVolumeButtons(overrideVolumeButtonsEnabled)
 			}
 		}
 	}
@@ -482,11 +489,18 @@ abstract class BaseGodotEditor : GodotActivity(), GameMenuFragment.GameMenuListe
 	 */
 	protected open fun overrideOrientationRequest() = true
 
+	protected open fun overrideVolumeButtons() = false
+
 	/**
 	 * Enable long press gestures for the Godot Android editor.
 	 */
 	protected open fun enableLongPressGestures() =
 		java.lang.Boolean.parseBoolean(GodotLib.getEditorSetting("interface/touchscreen/enable_long_press_as_right_click"))
+
+	/**
+	 * Disable scroll deadzone for the Godot Android editor.
+	 */
+	protected open fun disableScrollDeadzone() = true
 
 	/**
 	 * Enable pan and scale gestures for the Godot Android editor.
@@ -749,6 +763,10 @@ abstract class BaseGodotEditor : GodotActivity(), GameMenuFragment.GameMenuListe
 				val embedded = actionData.getBoolean(KEY_GAME_MENU_ACTION_PARAM1)
 				embedGameOnPlay(embedded)
 			}
+			GAME_MENU_ACTION_SET_DEBUG_MUTE_AUDIO -> {
+				val enabled = actionData.getBoolean(KEY_GAME_MENU_ACTION_PARAM1)
+				muteAudio(enabled)
+			}
 		}
 	}
 
@@ -809,6 +827,13 @@ abstract class BaseGodotEditor : GodotActivity(), GameMenuFragment.GameMenuListe
 		gameMenuState.putSerializable(GAME_MENU_ACTION_SET_CAMERA_MANIPULATE_MODE, mode)
 		godot?.runOnRenderThread {
 			GameMenuUtils.setCameraManipulateMode(mode.ordinal)
+		}
+	}
+
+	override fun muteAudio(enabled: Boolean) {
+		gameMenuState.putBoolean(GAME_MENU_ACTION_SET_DEBUG_MUTE_AUDIO, enabled)
+		godot?.runOnRenderThread {
+			GameMenuUtils.setDebugMuteAudio(enabled)
 		}
 	}
 

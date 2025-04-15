@@ -28,8 +28,7 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
 /**************************************************************************/
 
-#ifndef SCRIPT_LANGUAGE_H
-#define SCRIPT_LANGUAGE_H
+#pragma once
 
 #include "core/doc_data.h"
 #include "core/io/resource.h"
@@ -247,6 +246,7 @@ public:
 		SCRIPT_NAME_CASING_PASCAL_CASE,
 		SCRIPT_NAME_CASING_SNAKE_CASE,
 		SCRIPT_NAME_CASING_KEBAB_CASE,
+		SCRIPT_NAME_CASING_CAMEL_CASE,
 	};
 
 	struct ScriptTemplate {
@@ -505,5 +505,3 @@ public:
 	PlaceHolderScriptInstance(ScriptLanguage *p_language, Ref<Script> p_script, Object *p_owner);
 	~PlaceHolderScriptInstance();
 };
-
-#endif // SCRIPT_LANGUAGE_H

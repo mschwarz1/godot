@@ -153,10 +153,10 @@ extern void CrashHandlerException(int signal) {
 	print_error(vformat("%s: Program crashed with signal %d", __FUNCTION__, signal));
 
 	// Print the engine version just before, so that people are reminded to include the version in backtrace reports.
-	if (String(VERSION_HASH).is_empty()) {
-		print_error(vformat("Engine version: %s", VERSION_FULL_NAME));
+	if (String(GODOT_VERSION_HASH).is_empty()) {
+		print_error(vformat("Engine version: %s", GODOT_VERSION_FULL_NAME));
 	} else {
-		print_error(vformat("Engine version: %s (%s)", VERSION_FULL_NAME, VERSION_HASH));
+		print_error(vformat("Engine version: %s (%s)", GODOT_VERSION_FULL_NAME, GODOT_VERSION_HASH));
 	}
 	print_error(vformat("Dumping the backtrace. %s", msg));
 
@@ -172,7 +172,7 @@ extern void CrashHandlerException(int signal) {
 	if (FileAccess::exists(_execpath + ".debugsymbols")) {
 		_execpath = _execpath + ".debugsymbols";
 	}
-	_execpath = _execpath.replace("/", "\\");
+	_execpath = _execpath.replace_char('/', '\\');
 
 	CharString cs = _execpath.utf8(); // Note: should remain in scope during backtrace_simple call.
 	data.state = backtrace_create_state(cs.get_data(), 0, &error_callback, reinterpret_cast<void *>(&data));

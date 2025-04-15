@@ -28,8 +28,7 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
 /**************************************************************************/
 
-#ifndef INPUT_H
-#define INPUT_H
+#pragma once
 
 #include "core/input/input_event.h"
 #include "core/object/object.h"
@@ -86,7 +85,7 @@ public:
 	typedef void (*EventDispatchFunc)(const Ref<InputEvent> &p_event);
 
 private:
-	BitField<MouseButtonMask> mouse_button_mask;
+	BitField<MouseButtonMask> mouse_button_mask = MouseButtonMask::NONE;
 
 	RBSet<Key> key_label_pressed;
 	RBSet<Key> physical_keys_pressed;
@@ -403,5 +402,3 @@ public:
 
 VARIANT_ENUM_CAST(Input::MouseMode);
 VARIANT_ENUM_CAST(Input::CursorShape);
-
-#endif // INPUT_H
