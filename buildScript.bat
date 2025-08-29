@@ -9,8 +9,5 @@ scons "platform=windows" "module_mono_enabled=yes" "arch=x86_64" "precision=doub
 ::COPY  "%CD%\..\GodotNugetSourceData" "%APPDATA%\NuGet\GodotNugetSource"
 ::COPY  "%CD%\..\GodotNugetSourceData" "%APPDATA%\NuGet\LocalNugetSource"
 
-
-::IF [[ "-n" "%TEMPLATES%" "]]" (
-::  scons "target=template_release" "tools=no" "module_mono_enabled=yes" "precision=double" "-j8"
-::  scons "target=template_debug" "tools=no" "module_mono_enabled=yes" "precision=double" "-j8"
-::)
+scons "target=template_release" "tools=no" "platform=windows" "module_mono_enabled=yes" "arch=x86_64" "precision=double" "dev_build=yes" "use_llvm=yes" "use_mingw=yes" "separate_debug_symbols=yes" "-j30"
+scons "target=template_debug" "tools=no" "platform=windows" "module_mono_enabled=yes" "arch=x86_64" "precision=double" "dev_build=yes" "use_llvm=yes" "use_mingw=yes" "separate_debug_symbols=yes" "-j30"
