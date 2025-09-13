@@ -352,10 +352,8 @@ public:
 	virtual void font_set_variation_coordinates(const RID &p_font_rid, const Dictionary &p_variation_coordinates) = 0;
 	virtual Dictionary font_get_variation_coordinates(const RID &p_font_rid) const = 0;
 
-#ifndef DISABLE_DEPRECATED
-	virtual void font_set_oversampling(const RID &p_font_rid, double p_oversampling) {}
-	virtual double font_get_oversampling(const RID &p_font_rid) const { return 1.0; }
-#endif
+	virtual void font_set_oversampling(const RID &p_font_rid, double p_oversampling) = 0;
+	virtual double font_get_oversampling(const RID &p_font_rid) const = 0;
 
 	virtual TypedArray<Vector2i> font_get_size_cache_list(const RID &p_font_rid) const = 0;
 	virtual void font_clear_size_cache(const RID &p_font_rid) = 0;
@@ -605,7 +603,7 @@ public:
 
 	TypedArray<Vector3i> parse_structured_text(StructuredTextParser p_parser_type, const Array &p_args, const String &p_text) const;
 
-	virtual void set_current_drawn_item_ovrsampling(double p_vp_oversampling) { vp_oversampling = p_vp_oversampling; }
+	virtual void set_current_drawn_item_oversampling(double p_vp_oversampling) { vp_oversampling = p_vp_oversampling; }
 
 	virtual void cleanup() {}
 
